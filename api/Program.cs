@@ -43,8 +43,7 @@ app.MapGet("/health", () => Results.Ok(new
     status = "ok",
     timestamp = DateTime.UtcNow
 }))
-.WithName("Health")
-.WithOpenApi();
+.WithName("Health");
 
 // Add more endpoint groups below as you build features:
 // app.MapGroup("/api/items").MapItemsEndpoints();
