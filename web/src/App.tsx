@@ -2,6 +2,7 @@ import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { useMe } from './features/auth/useAuth'
 import LoginPage from './features/auth/LoginPage'
 import RegisterPage from './features/auth/RegisterPage'
+import RoomCatalogPage from './features/rooms/RoomCatalogPage'
 
 function ProtectedRoute() {
   const { data: user, isPending, error } = useMe()
@@ -26,11 +27,12 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Navigate to="/rooms" replace />} />
+        <Route path="/rooms" element={<RoomCatalogPage />} />
         <Route
-          path="/rooms"
+          path="/rooms/:roomId"
           element={
             <div className="flex min-h-screen items-center justify-center">
-              <p className="text-muted-foreground text-sm">Rooms — Merge 2</p>
+              <p className="text-muted-foreground text-sm font-mono">Chat — Chunk C</p>
             </div>
           }
         />
