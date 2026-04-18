@@ -48,5 +48,5 @@ pnpm-debug.log*
 coverage/
 *.pid
 .claude/
- 
+e2e/test-results/
  
