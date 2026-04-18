@@ -3,6 +3,7 @@ using Api.Data;
 using Api.Domain;
 using Api.Infrastructure;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
