@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Users, Wifi, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,7 @@ import MessageList from './MessageList'
 import MessageComposer from './MessageComposer'
 import { useHeartbeat } from '@/hooks/useHeartbeat'
 import { useMarkRoomRead } from '@/hooks/useUnread'
+import type { PresenceStatus } from '@/features/presence/usePresence'
 import type { MessageDto, OptimisticMessage } from './types'
 
 export default function ChatWindow() {
@@ -41,6 +43,15 @@ export default function ChatWindow() {
   resubmitRef.current = resubmit
 
   useHeartbeat(hub)
+
+  // Seed own presence to 'online' once connected. The server broadcasts
+  // PresenceChanged in OnConnectedAsync — before JoinRoom adds us to the
+  // room group — so we never receive our own event. Set it client-side instead.
+  const qc = useQueryClient()
+  useEffect(() => {
+    if (!connected || !me?.id) return
+    qc.setQueryData<PresenceStatus>(['presence', me.id], 'online')
+  }, [connected, me?.id, qc])
 
   const markRead = useMarkRoomRead(roomId)
   // Clear unread when the room is opened.
