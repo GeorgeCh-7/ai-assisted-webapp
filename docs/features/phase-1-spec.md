@@ -116,7 +116,7 @@ Docker Compose can only bind ports in one worktree at a time. **Track A owns the
 - Serilog wired; SignalR connection ID enriched on every log entry
 - `AppDbContext` with all Phase 1 entities; `EFCore.NamingConventions` snake_case; Identity tables renamed in `OnModelCreating`
 - Auth endpoints: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` — cookie issued, CSRF seeded
-- `AppSession` row created on login, revoked on logout
+- `AppSession` row created on login, revoked on logout. Capture `UserAgent` from `HttpContext.Request.Headers["User-Agent"]` and `IpAddress` from `HttpContext.Connection.RemoteIpAddress` into the row on login — Phase 2's active-sessions UI (brief 2.2.4) needs these; capturing now avoids every pre-Phase-2 session rendering as "Unknown"
 - `OnValidatePrincipal` check: load session from DB, reject if `is_revoked = true`
 - Argon2id `IPasswordHasher<AppUser>` registered (last registration wins over Identity default)
 - Antiforgery configured; all mutating routes validated
@@ -128,13 +128,14 @@ Docker Compose can only bind ports in one worktree at a time. **Track A owns the
 - Watermark: on each `SendMessage`, atomically `UPDATE rooms SET current_watermark = current_watermark + 1 WHERE id = @roomId RETURNING current_watermark` (in a transaction); assign result to `Message.Watermark`
 - `Room.CurrentWatermark` and `Message.Watermark` columns in schema; `HasIndex(m => new { m.RoomId, m.Watermark })` in `OnModelCreating` (required for pagination performance at 100K+ rows)
 - Presence service: online on first connection, offline on last disconnect, `PresenceChanged` broadcast
-- Room CRUD: `GET /api/rooms` with search + cursor pagination, `POST /api/rooms`, `GET /api/rooms/{id}`, `POST /api/rooms/{id}/join`, `POST /api/rooms/{id}/leave`
+- Room CRUD: `GET /api/rooms` with search + cursor pagination, `POST /api/rooms`, `GET /api/rooms/{id}`, `POST /api/rooms/{id}/join`, `POST /api/rooms/{id}/leave`. Leave rejects with 403 when the caller is the room owner (brief 2.4.5: owner must delete the room, cannot leave it) — Phase 1 does not implement delete-room, so owner has no exit path in Phase 1; Phase 2 adds delete
 - Message history: `GET /api/rooms/{id}/messages` with `before={watermark}` (DESC) and `since={watermark}` (ASC) — member-only gate
 - `RoomUnread`: increment on `MessageReceived`, reset on `JoinRoom`
 - Tests:
   - Auth + session validation (existing)
   - Message deduplication (existing)
-  - Room membership rules (existing)
+  - **Content size validation:** `SendMessage` with `content` > 3072 bytes (UTF-8 encoded, per brief 2.5.2) rejects with `Error { code: "MESSAGE_TOO_LARGE" }`; no row persisted; no broadcast. Boundary test: exactly 3072 bytes accepted, 3073 rejected
+  - Room membership rules (existing) — including owner-cannot-leave (owner POST /leave → 403)
   - ChatHub integration (existing)
   - **Pagination correctness:** seed a room with 200 messages (watermarks 1–200); assert `GET ?limit=50` returns watermarks 200–151 (DESC); use `nextCursor` to fetch watermarks 150–101, 100–51, 50–1; assert final page has `nextCursor: null`; assert `GET ?before=100` returns watermarks 99–50; assert `GET ?since=150` returns watermarks 151–200 (ASC)
 - All xUnit tests green

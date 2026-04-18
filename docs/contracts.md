@@ -103,13 +103,15 @@ Sets `.chat.session` cookie on success.
 
 Request:
 ```json
-{ "username": "string", "password": "string" }
+{ "email": "string", "password": "string" }
 ```
+Login is by **email + password** per brief 2.1.3 and the login wireframe. Usernames are for display/addressing (friend requests, @-mentions, message author), not for authentication.
+
 Response 200:
 ```json
 { "id": "uuid", "username": "string", "email": "string" }
 ```
-Error: `401 { "error": "Invalid credentials" }`
+Error: `401 { "error": "Invalid credentials" }` — returned for both unknown email and wrong password (don't leak which).
 
 After login: call `GET /api/auth/me` before any mutations.
 
@@ -191,10 +193,11 @@ Errors: `404 { "error": "Room not found" }` · `409 { "error": "Already a member
 
 ### POST /api/rooms/{id}/leave
 Auth: required. CSRF: required.
+Owners cannot leave their own room — they must delete it (Phase 2). Enforced server-side.
 
 Response 200: `{}`
 
-Errors: `404 { "error": "Room not found" }` · `400 { "error": "Not a member" }`
+Errors: `404 { "error": "Room not found" }` · `400 { "error": "Not a member" }` · `403 { "error": "Owner cannot leave their own room" }`
 
 ---
 
@@ -256,14 +259,15 @@ Removes caller from `room-{roomId}`. Broadcasts `UserLeftRoom`.
 { roomId: string, content: string, idempotencyKey: string }
 ```
 `idempotencyKey`: client-generated UUID. Same value on every retry of the same logical message.
-Hub checks `db.Messages.AnyAsync(m => m.Id == dto.IdempotencyKey)`. If exists: returns existing message, no insert.
+`content`: UTF-8 text, max **3 KB** (3072 bytes in UTF-8 encoding) per brief 2.5.2. Validate server-side: reject with hub `Error { code: "MESSAGE_TOO_LARGE", message: "Message exceeds 3 KB" }` before insert. Clients should enforce the same limit in the composer for UX, but the server is the source of truth.
+Hub dedup: insert with PK = `idempotencyKey`, catch unique violation on concurrent duplicates (see `docs/features/phase-1-spec.md` idempotency flow).
 On new message: persists, broadcasts `MessageReceived` to `room-{roomId}`.
 
 #### Heartbeat
 ```ts
 {}
 ```
-Updates `user_presence.last_heartbeat_at` for the caller. No broadcast; no effect on online/offline state. Online/offline is driven by `OnConnectedAsync` / `OnDisconnectedAsync` with per-user connection ref-counting so multi-tab users stay online while any tab is connected. Heartbeat is reserved for Phase 2 AFK detection (stale heartbeat → AFK).
+Updates `user_presence.last_heartbeat_at` for the caller. No broadcast; no effect on online/offline state. Online/offline is driven by `OnConnectedAsync` / `OnDisconnectedAsync` with per-user connection ref-counting so multi-tab users stay online while any tab is connected. Heartbeat is reserved for Phase 2 AFK detection: **brief 2.2.2 defines AFK as ≥ 60 s without activity across all tabs**. Phase 2 sweeper transitions users to AFK when `max(last_heartbeat_at) across their connections` is older than 60 s, and back to `online` on the next heartbeat. Client should send a heartbeat on any user interaction (mousemove/keypress/focus), debounced to ~15 s.
 
 ### Server → Client
 
@@ -313,7 +317,7 @@ Hub methods never throw to callers. On rejection, send to caller only:
 // event name
 "Error"
 ```
-Frontend listens for `"Error"` and surfaces inline. Phase 1 codes: `NOT_MEMBER`, `ROOM_NOT_FOUND`.
+Frontend listens for `"Error"` and surfaces inline. Phase 1 codes: `NOT_MEMBER`, `ROOM_NOT_FOUND`, `MESSAGE_TOO_LARGE`.
 
 ---
 
@@ -325,7 +329,7 @@ Managed by `EnsureCreated()`. Snake_case via `EFCore.NamingConventions`. Identit
 |-------|-------------|
 | `users` | `id uuid`, `user_name text`, `email text`, `password_hash text` |
 | `user_claims` | Identity default, renamed |
-| `sessions` | `id uuid PK`, `user_id uuid FK`, `created_at`, `last_seen_at`, `is_revoked bool` |
+| `sessions` | `id uuid PK`, `user_id uuid FK`, `created_at`, `last_seen_at`, `is_revoked bool`, `user_agent text NULL`, `ip_address inet NULL` |
 | `rooms` | `id uuid PK`, `name text UNIQUE`, `description text`, `created_at`, `created_by_id uuid FK`, `current_watermark bigint NOT NULL DEFAULT 0` |
 | `room_memberships` | `room_id uuid`, `user_id uuid` — composite PK, `joined_at` |
 | `messages` | `id uuid PK` (= idempotency key), `room_id uuid FK ON DELETE CASCADE`, `author_id uuid FK NULL ON DELETE SET NULL`, `content text`, `sent_at`, `watermark bigint NOT NULL` |

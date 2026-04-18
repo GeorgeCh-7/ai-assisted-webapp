@@ -12,7 +12,7 @@ Authenticated users in a chat community. Primary audience for the demo is the ha
 
 ### In
 
-- **Auth:** registration (email + unique username), login, persistent session, password reset/change, account deletion, active session list with per-session logout
+- **Auth:** registration (email + unique username; **username is immutable after registration** per brief 2.1.2 — the denormalized `authorUsername` on historical messages depends on this invariant, so no username-change endpoint exists at any phase), login by email + password, persistent session, password reset/change, account deletion, active session list with browser/IP + per-session logout
 - **Presence:** online / AFK / offline states; multi-tab coordination; sub-2s propagation
 - **Public rooms:** discoverable catalog with search, free join, room metadata (name, description, member count)
 - **Private rooms:** invite-only, not listed in catalog
@@ -35,3 +35,17 @@ Authenticated users in a chat community. Primary audience for the demo is the ha
 - Forced periodic password change
 - Rate limiting, metrics, distributed tracing
 - Mobile / native clients
+
+## Non-functional targets
+
+From brief §3:
+
+- **Concurrent users:** up to 300 simultaneously connected (informs SignalR connection-handling design, not a hard limit to stress-test)
+- **Per-room participants:** up to 1 000 (informs per-room broadcast cost — one `MessageReceived` broadcast goes to up to 1 000 connections)
+- **Rooms per user:** unlimited; typical sizing ~20 rooms, ~50 contacts
+- **Message delivery latency:** ≤ 3 s from send to recipient-visible
+- **Presence propagation:** ≤ 2 s for online ↔ offline transitions (tighter than the 3 s message bound)
+- **History scale:** rooms remain usable with ≥ 10 000 messages — drives the watermark index and cursor-pagination design
+- **Persistence:** messages persist indefinitely ("for years")
+- **File storage:** local filesystem; 20 MB file cap, 3 MB image cap
+- **Layout (brief §4 + Appendix A):** classic web-chat layout — top nav, center message area, bottom composer, **right-hand sidebar** with rooms + contacts (accordion-compacts when a room is open), members panel with presence icons on the far right inside an open room. The product should read as a "classic web chat," not a modern social/collaboration app
