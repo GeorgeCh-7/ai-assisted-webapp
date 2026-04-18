@@ -30,6 +30,9 @@ builder.Services
     .AddIdentityCore<AppUser>(opts =>
     {
         opts.Password.RequireNonAlphanumeric = false;
+        opts.Password.RequireUppercase = false;
+        opts.Password.RequireDigit = false;
+        opts.Password.RequireLowercase = false;
     })
     .AddEntityFrameworkStores<AppDbContext>();
 
@@ -117,3 +120,6 @@ app.MapMessagesEndpoints();
 app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization();
 
 app.Run();
+
+// Exposed for WebApplicationFactory in Api.Tests
+public partial class Program { }

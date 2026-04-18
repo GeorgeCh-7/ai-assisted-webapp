@@ -28,9 +28,7 @@ public static class SessionValidation
         }
 
         var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
-        var session = await db.Sessions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == sessionId);
+        var session = await db.Sessions.FindAsync(sessionId);
 
         if (session is null || session.IsRevoked)
         {
@@ -38,9 +36,8 @@ public static class SessionValidation
             return;
         }
 
-        await db.Sessions
-            .Where(s => s.Id == sessionId)
-            .ExecuteUpdateAsync(s => s.SetProperty(p => p.LastSeenAt, DateTime.UtcNow));
+        session.LastSeenAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
 
         // Slide the cache window forward
         var identity = (ClaimsIdentity)context.Principal!.Identity!;
