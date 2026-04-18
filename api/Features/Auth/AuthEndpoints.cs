@@ -98,9 +98,12 @@ public static class AuthEndpoints
         var sidClaim = user.FindFirst("sid");
         if (sidClaim is not null && Guid.TryParse(sidClaim.Value, out var sessionId))
         {
-            await db.Sessions
-                .Where(s => s.Id == sessionId)
-                .ExecuteUpdateAsync(s => s.SetProperty(p => p.IsRevoked, true));
+            var session = await db.Sessions.FindAsync(sessionId);
+            if (session is not null)
+            {
+                session.IsRevoked = true;
+                await db.SaveChangesAsync();
+            }
         }
         await httpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
         return Results.Ok(new { });
