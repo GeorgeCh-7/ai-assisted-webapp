@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { useRooms, useJoinRoom, useLeaveRoom } from './useRooms'
 import CreateRoomModal from './CreateRoomModal'
+import { useUnreadCount } from '@/hooks/useUnread'
 import type { RoomDto } from './types'
 
 export default function RoomCatalogPage() {
@@ -132,6 +133,7 @@ const RoomRow = ({ room }: RoomRowProps) => {
   const { mutate: join, isPending: joining } = useJoinRoom()
   const { mutate: leave, isPending: leaving } = useLeaveRoom()
   const busy = joining || leaving
+  const unread = useUnreadCount(room.id)
 
   return (
     <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-muted/30 transition-colors">
@@ -166,6 +168,11 @@ const RoomRow = ({ room }: RoomRowProps) => {
               className="text-[10px] px-1 py-0 h-4 font-mono shrink-0"
             >
               member
+            </Badge>
+          )}
+          {unread > 0 && (
+            <Badge className="text-[10px] px-1.5 py-0 h-4 min-w-4 font-mono shrink-0 bg-emerald-500 hover:bg-emerald-500 text-white">
+              {unread > 99 ? '99+' : unread}
             </Badge>
           )}
         </div>

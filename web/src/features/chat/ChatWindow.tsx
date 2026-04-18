@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Users, Wifi, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,8 @@ import { useSignalR, type HubLike } from './useSignalR'
 import { useMessageHistory, useSendMessage } from './useMessages'
 import MessageList from './MessageList'
 import MessageComposer from './MessageComposer'
+import { useHeartbeat } from '@/hooks/useHeartbeat'
+import { useMarkRoomRead } from '@/hooks/useUnread'
 import type { MessageDto, OptimisticMessage } from './types'
 
 export default function ChatWindow() {
@@ -37,6 +39,18 @@ export default function ChatWindow() {
 
   const { send, pending, resubmit } = useSendMessage(roomId, me, hub)
   resubmitRef.current = resubmit
+
+  useHeartbeat(hub)
+
+  const markRead = useMarkRoomRead(roomId)
+  // Clear unread when the room is opened.
+  useEffect(() => { markRead() }, [roomId, markRead])
+  // Also clear when the user returns to this tab after being away.
+  useEffect(() => {
+    const handle = () => { if (document.visibilityState === 'visible') markRead() }
+    document.addEventListener('visibilitychange', handle)
+    return () => document.removeEventListener('visibilitychange', handle)
+  }, [markRead])
 
   // Merge TQ cache (pages DESC each) → reversed to ASC, then append optimistic messages.
   // Dedup: remove any pending message already confirmed in the cache.

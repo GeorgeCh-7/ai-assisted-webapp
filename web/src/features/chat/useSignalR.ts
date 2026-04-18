@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { prependConfirmedMessage } from './useMessages'
+import { incrementUnread } from '@/hooks/useUnread'
 import type { MessageDto, PagedMessagesResponse } from './types'
 import type { PresenceStatus } from '@/features/presence/usePresence'
 
@@ -70,6 +71,10 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
         ['messages', roomId],
         old => prependConfirmedMessage(old, msg),
       )
+      // Count as unread when the tab isn't visible (user is away from this room).
+      if (document.visibilityState !== 'visible') {
+        incrementUnread(qc, roomId)
+      }
     }
 
     const handlePresence = (payload: unknown) => {
