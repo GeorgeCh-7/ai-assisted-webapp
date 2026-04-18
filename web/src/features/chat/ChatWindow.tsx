@@ -1,9 +1,10 @@
+import { useCallback, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Users, Wifi, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useMe } from '@/features/auth/useAuth'
 import { useRoom, useLeaveRoom } from '@/features/rooms/useRooms'
-import { useSignalR } from './useSignalR'
+import { useSignalR, type HubLike } from './useSignalR'
 import { useMessageHistory, useSendMessage } from './useMessages'
 import MessageList from './MessageList'
 import MessageComposer from './MessageComposer'
@@ -15,7 +16,16 @@ export default function ChatWindow() {
   const { data: room } = useRoom(roomId)
   const { mutate: leaveRoom, isPending: leaving } = useLeaveRoom()
 
-  const { hub, connected, currentWatermark: _ } = useSignalR(roomId)
+  // Breaks the ordering problem: useSignalR must be called before useSendMessage
+  // (it returns hub), but onReconnected needs resubmit from useSendMessage.
+  // The ref is updated each render so the stable callback always calls the latest resubmit.
+  const resubmitRef = useRef<((hub: HubLike) => Promise<void>) | undefined>(undefined)
+  const handleReconnected = useCallback(
+    (h: HubLike) => resubmitRef.current?.(h) ?? Promise.resolve(),
+    [],
+  )
+
+  const { hub, connected } = useSignalR(roomId, { onReconnected: handleReconnected })
 
   const {
     data,
@@ -25,7 +35,8 @@ export default function ChatWindow() {
     isLoading,
   } = useMessageHistory(roomId)
 
-  const { send, pending } = useSendMessage(roomId, me, hub)
+  const { send, pending, resubmit } = useSendMessage(roomId, me, hub)
+  resubmitRef.current = resubmit
 
   // Merge TQ cache (pages DESC each) → reversed to ASC, then append optimistic messages.
   // Dedup: remove any pending message already confirmed in the cache.
