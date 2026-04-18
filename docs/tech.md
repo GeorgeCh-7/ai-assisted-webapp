@@ -6,16 +6,20 @@ The stack, conventions, and recipes. Read this before adding anything.
 
 ## Stack
 
-| Layer     | Choice                          | Why                                       |
-|-----------|---------------------------------|-------------------------------------------|
-| Backend   | .NET 9 Minimal API              | Low ceremony, fast iteration              |
-| ORM       | EF Core 9 + Npgsql              | Scaffolding speed; switch to Dapper if perf matters |
-| DB        | PostgreSQL 16                   | Dockerizable, no licensing noise          |
-| Frontend  | React 18 + TypeScript + Vite    | Dense, low-boilerplate, agent-friendly    |
-| Styling   | TailwindCSS + shadcn/ui         | Copy-paste components, no lock-in         |
-| Server state | TanStack Query              | Standard; handles caching, refetch, errors |
-| Local state | useState / useReducer        | No Redux unless truly needed              |
-| Container | Docker Compose (dev)            | One-command startup                       |
+| Layer        | Choice                          | Why                                       |
+|--------------|---------------------------------|-------------------------------------------|
+| Backend      | .NET 9 Minimal API              | Low ceremony, fast iteration              |
+| ORM          | EF Core 9 + Npgsql              | Scaffolding speed; switch to Dapper if perf matters |
+| DB           | PostgreSQL 16                   | Dockerizable, no licensing noise          |
+| Real-time    | ASP.NET Core SignalR            | First-class .NET WebSocket hub; handles reconnect, groups, presence |
+| Logging      | Serilog                         | Structured logs; SignalR connection ID enriched on every entry |
+| Testing      | xUnit + WebApplicationFactory   | Unit tests for business logic; integration tests for API endpoints |
+| XMPP         | XmppDotNet (Phase 3)            | .NET XMPP library for Jabber client + federation |
+| Frontend     | React 18 + TypeScript + Vite    | Dense, low-boilerplate, agent-friendly    |
+| Styling      | TailwindCSS + shadcn/ui         | Copy-paste components, no lock-in         |
+| Server state | TanStack Query                  | Standard; handles caching, refetch, errors |
+| Local state  | useState / useReducer           | No Redux unless truly needed              |
+| Container    | Docker Compose (dev)            | One-command startup                       |
 
 ---
 
@@ -243,3 +247,70 @@ Open to any origin in dev. Configured in `Program.cs`. Do not tighten until demo
 - Docker secrets / vault integration
 
 Every item on this list is a time trap disguised as "good practice." Add them only when absent functionality blocks a demo goal.
+
+---
+
+## SignalR
+
+Hub class lives in `api/Hubs/ChatHub.cs`. Register in `Program.cs`:
+
+```csharp
+builder.Services.AddSignalR();
+app.MapHub<ChatHub>("/hubs/chat");
+```
+
+Frontend client:
+
+```bash
+cd web && npm install @microsoft/signalr
+```
+
+Groups map to rooms: `Groups.AddToGroupAsync(connectionId, roomId)`. Personal dialogs use a deterministic group name: `$"dm-{Math.Min(userA, userB)}-{Math.Max(userA, userB)}"`.
+
+---
+
+## Serilog + Connection ID Enrichment
+
+```csharp
+builder.Host.UseSerilog((ctx, cfg) => cfg
+    .ReadFrom.Configuration(ctx.Configuration)
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("App", "ChatApi")
+    .WriteTo.Console(new RenderedCompactJsonFormatter()));
+```
+
+In `ChatHub`, push connection ID into the log context on every invocation:
+
+```csharp
+using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+{
+    // handler body
+}
+```
+
+---
+
+## Idempotency & Retries
+
+**Pattern:** client generates a `Guid messageId` before sending. Server checks if a row with that ID already exists; if so, returns the existing record without inserting. Frontend never generates a new ID on retry — same ID, same send.
+
+```csharp
+// in message handler
+if (await db.Messages.AnyAsync(m => m.Id == dto.MessageId)) return;
+```
+
+Frontend: TanStack Query mutations set `retry: 3`. SignalR `onreconnected` callback re-sends any pending messages using their original IDs.
+
+---
+
+## Testing
+
+Add test project:
+
+```bash
+dotnet new xunit -n Api.Tests
+dotnet add Api.Tests reference api/Api.csproj
+dotnet add Api.Tests package Microsoft.AspNetCore.Mvc.Testing
+```
+
+`WebApplicationFactory<Program>` spins up the full app in-process for endpoint tests. Business logic (e.g., ban rules, friend-request state machine) is unit-tested by calling service methods directly with an in-memory EF context (`UseInMemoryDatabase`).
