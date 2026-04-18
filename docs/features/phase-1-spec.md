@@ -156,10 +156,10 @@ Docker Compose can only bind ports in one worktree at a time. **Track A owns the
 - `RoomCatalogPage`: lists rooms with search input, join/leave buttons, create-room modal
 - `ChatWindow`: `MessageList` (chronological display, scroll-to-bottom on new message) + `MessageComposer` (Enter to send, Shift+Enter for newline, optimistic insert)
 - `useSignalR`: connection with cookie auth, auto-reconnect (`withAutomaticReconnect`), forwards `MessageReceived` / `PresenceChanged` / `UserJoinedRoom` / `UserLeftRoom` events into React Query cache; tracks `lastSeenWatermark` per room (updated on each `MessageReceived`)
-- Gap detection on reconnect: `onreconnected` callback re-invokes `JoinRoom` and compares returned `currentWatermark` against `lastSeenWatermark`; if `currentWatermark > lastSeenWatermark`, calls `GET ?since={lastSeenWatermark}` to backfill missing messages before resuming normal operation
+- Gap detection on reconnect: `onreconnected` callback re-invokes `JoinRoom` and compares returned `currentWatermark` against `lastSeenWatermark`. If `currentWatermark > lastSeenWatermark`, loop `GET /api/rooms/{id}/messages?since={cursor}` — initial `cursor = lastSeenWatermark`, subsequent `cursor = response.nextCursor` — until `nextCursor === null`, merging each page into the message cache. Single-shot (`limit=50`) leaves messages missing when gaps exceed 50. Live `MessageReceived` events arriving during backfill are dedup'd by `id` (= `idempotencyKey`), so overlap between backfill pages and the live stream is safe
 - `useSendMessage`: generates `idempotencyKey` once, retries with same key (TanStack Query `retry: 3`); on SignalR reconnect, re-sends any message pending at disconnect
 - `useMessageHistory` uses `useInfiniteQuery`; `getNextPageParam` returns `nextCursor` (the oldest watermark on the page); `MessageList` attaches an intersection observer to the top sentinel element to trigger `fetchNextPage` as the user scrolls up
-- `useHeartbeat`: sends `Heartbeat({ tabId })` every 15 s; `tabId` is a session-scoped `crypto.randomUUID()` stored in module scope (not localStorage)
+- `useHeartbeat`: sends `Heartbeat()` every 15 s (no payload). Online/offline is driven by the hub's per-user connection ref-count in `OnConnectedAsync` / `OnDisconnectedAsync`, not by heartbeats — multi-tab users stay online while any tab is connected. Heartbeat only touches `user_presence.last_heartbeat_at` for future AFK detection in Phase 2
 - `PresenceIndicator`: green dot = online, grey = offline — driven by `PresenceChanged` events
 - `useUnread`: increments per-room count on `MessageReceived` when room is not focused; resets to 0 when room is opened
 - All acceptance tests pass against MSW
@@ -184,9 +184,11 @@ After both tracks reach Merge 2:
 
 - [ ] **Each track merges to `main` at least twice before the integration gate.** Track A: Merge 1 (auth + schema) and Merge 2 (hub + rooms + messages). Track B: Merge 1 (auth screens) and Merge 2 (chat + SignalR + presence). The integration gate is not the first merge for either track.
 
-- [ ] **Integration gate passes against real backend.** Open two browser tabs; log in as two different users; both join the same public room; each sends three messages; messages appear in both tabs in chronological order; the sender's presence toggles from offline → online within 2 seconds of connecting. Test runs against `docker compose up`, not MSW.
+- [ ] **Integration gate passes against real backend.** Open **two separate browser profiles** — or one normal window + one incognito window. Two tabs in the same profile share the `.chat.session` cookie and can't hold two user sessions simultaneously. Log in as two different users; both join the same public room; each sends three messages; messages appear in both views in chronological order; each sender's presence toggles offline → online within 2 s of connecting **and** online → offline within 5 s of closing their last window. Test runs against `docker compose up`, not MSW.
 
-- [ ] **Zero duplicate messages on reconnect.** In one tab, start typing a message and submit; immediately close the tab before the server ack arrives; reopen and reconnect; the message appears exactly once in the room history.
+- [ ] **Multi-tab presence stays online while any tab is open.** In profile A, log in as user A and open the chat room in two tabs. In profile B, log in as user B and observe user A shows online. Close one of user A's tabs; user B's view still shows user A online. Close the remaining tab; within 5 s user B's view flips user A to offline. Verifies the hub ref-counts connections per user rather than flipping offline on any single disconnect.
+
+- [ ] **Server-side dedup holds under concurrent same-key sends.** Drive the hub from a scripted test: open a SignalR connection, invoke `SendMessage` 10× in parallel (`Promise.all`) with the **same** `idempotencyKey` and `roomId`. Assert: exactly one row exists in `messages` with `id = idempotencyKey`; no invoke throws; all 10 callers receive a resolved ack. This is the actual race (TanStack Query retry racing with `onreconnected` resubmit); the naive `AnyAsync + Add` path fails it with a unique-violation.
 
 ---
 
@@ -258,8 +260,30 @@ optionsBuilder.UseSnakeCaseNamingConvention();
 
 ### Idempotency key flow (Track A + Track B contract)
 - Track B: `const idempotencyKey = crypto.randomUUID()` generated once per logical message, stored in component state. Never regenerated on retry.
-- Track A: `if (await db.Messages.AnyAsync(m => m.Id == dto.IdempotencyKey)) return existingMessage;`
-- SignalR `onreconnected` callback in Track B re-sends pending messages using their original keys.
+- Track B coordination: `useSendMessage` owns the pending-sends map (keyed by `idempotencyKey`). The `onreconnected` handler only resubmits messages whose mutation promise is still unresolved. TanStack Query retries and reconnect-resubmits must not both fire for the same key — either one wins, the other is a no-op. Without this the server receives two concurrent invokes for the same key (see Track A race below).
+- Track A — race-safe insert (naive `AnyAsync` + `Add` is racy: two concurrent invokes with the same key both see "not found," both insert, second throws):
+  ```csharp
+  var msg = new Message {
+      Id = dto.IdempotencyKey,
+      RoomId = dto.RoomId,
+      AuthorId = userId,
+      Content = dto.Content,
+      SentAt = DateTime.UtcNow,
+      Watermark = await NextWatermark(dto.RoomId), // atomic UPDATE ... RETURNING
+  };
+  db.Messages.Add(msg);
+  try {
+      await db.SaveChangesAsync();
+  } catch (DbUpdateException ex)
+      when (ex.InnerException is Npgsql.PostgresException pg
+            && pg.SqlState == PostgresErrorCodes.UniqueViolation) {
+      // Concurrent duplicate lost the race. Fetch the winner and return it.
+      msg = await db.Messages.AsNoTracking().FirstAsync(m => m.Id == dto.IdempotencyKey);
+  }
+  return msg;
+  ```
+  On the catch branch the incremented watermark is wasted — leaves a hole in the sequence. Acceptable: watermark monotonicity is preserved, pagination and `since=` still work correctly, only `count(messages)` ≠ `max(watermark)`.
+- SignalR `onreconnected` callback in Track B re-sends pending messages using their original keys (subject to the coordination rule above).
 
 ### Session validation (Track A)
 `OnValidatePrincipal` fires on every authenticated request. It must:

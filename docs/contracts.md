@@ -142,11 +142,12 @@ Response 200:
 ```json
 {
   "items": [
-    { "id": "uuid", "name": "string", "description": "string", "memberCount": 0, "isMember": false }
+    { "id": "uuid", "name": "string", "description": "string", "memberCount": 0, "isMember": false, "isPrivate": false, "myRole": null }
   ],
   "nextCursor": "string | null"
 }
 ```
+Phase 1 always returns `isPrivate: false` (no private rooms yet) and filters the catalog accordingly. `myRole` is `null` when `isMember: false`; when `isMember: true`, it's `'owner'` for the creator and `'member'` otherwise. `'admin'` is reserved for Phase 2.
 
 ---
 
@@ -160,7 +161,7 @@ Request:
 ```
 Response 201:
 ```json
-{ "id": "uuid", "name": "string", "description": "string", "memberCount": 1, "isMember": true }
+{ "id": "uuid", "name": "string", "description": "string", "memberCount": 1, "isMember": true, "isPrivate": false, "myRole": "owner" }
 ```
 Errors: `400 { "error": "Name is required" }` · `409 { "error": "Room name already taken" }`
 
@@ -171,7 +172,7 @@ Auth: required.
 
 Response 200:
 ```json
-{ "id": "uuid", "name": "string", "description": "string", "memberCount": 0, "isMember": false }
+{ "id": "uuid", "name": "string", "description": "string", "memberCount": 0, "isMember": false, "isPrivate": false, "myRole": null }
 ```
 Response 404: `{ "error": "Room not found" }`
 
@@ -182,7 +183,7 @@ Auth: required. CSRF: required.
 
 Response 200:
 ```json
-{ "id": "uuid", "name": "string", "description": "string", "memberCount": 1, "isMember": true }
+{ "id": "uuid", "name": "string", "description": "string", "memberCount": 1, "isMember": true, "isPrivate": false, "myRole": "member" }
 ```
 Errors: `404 { "error": "Room not found" }` · `409 { "error": "Already a member" }`
 
@@ -214,13 +215,16 @@ Response 200:
       "content": "string",
       "sentAt": "2024-01-01T12:00:00Z",
       "idempotencyKey": "uuid",
-      "watermark": 42
+      "watermark": 42,
+      "editedAt": null,
+      "deletedAt": null,
+      "replyToMessageId": null
     }
   ],
   "nextCursor": "string | null"
 }
 ```
-`id` and `idempotencyKey` are the same value. `watermark` is the room-scoped monotonic integer assigned at insert.
+`id` and `idempotencyKey` are the same value. `watermark` is the room-scoped monotonic integer assigned at insert. `editedAt` / `deletedAt` / `replyToMessageId` are reserved for Phase 2 and always null in Phase 1 — shape matches `MessageReceived` exactly.
 
 Errors: `403 { "error": "Not a member" }` · `404 { "error": "Room not found" }`
 
@@ -257,9 +261,9 @@ On new message: persists, broadcasts `MessageReceived` to `room-{roomId}`.
 
 #### Heartbeat
 ```ts
-{ tabId: string }
+{}
 ```
-Updates `user_presence.last_heartbeat_at`. If first heartbeat after offline state: marks online, broadcasts `PresenceChanged`.
+Updates `user_presence.last_heartbeat_at` for the caller. No broadcast; no effect on online/offline state. Online/offline is driven by `OnConnectedAsync` / `OnDisconnectedAsync` with per-user connection ref-counting so multi-tab users stay online while any tab is connected. Heartbeat is reserved for Phase 2 AFK detection (stale heartbeat → AFK).
 
 ### Server → Client
 
@@ -267,22 +271,27 @@ Updates `user_presence.last_heartbeat_at`. If first heartbeat after offline stat
 To: `room-{roomId}`
 ```ts
 {
-  id: string            // same as idempotencyKey
+  id: string                     // same as idempotencyKey
   roomId: string
   authorId: string
   authorUsername: string
   content: string
-  sentAt: string        // ISO 8601
+  sentAt: string                 // ISO 8601
   idempotencyKey: string
-  watermark: number     // room-scoped monotonic integer; client tracks max seen per room
+  watermark: number              // room-scoped monotonic integer; client tracks max seen per room
+  editedAt: string | null        // reserved for Phase 2; always null in Phase 1
+  deletedAt: string | null       // reserved for Phase 2; always null in Phase 1
+  replyToMessageId: string | null // reserved for Phase 2; always null in Phase 1
 }
 ```
+The three reserved fields ship as `null` in Phase 1. Frontend must render them (treat as absent) without crashing; types must include them. Adding fields to an active event later forces coordinated deploys — reserving them now is free.
 
 #### PresenceChanged
 To: all room groups the affected user belongs to
 ```ts
-{ userId: string, status: 'online' | 'offline' }
+{ userId: string, status: 'online' | 'afk' | 'offline' }
 ```
+Phase 1 only emits `'online'` and `'offline'`. `'afk'` is reserved for Phase 2 so exhaustive `switch` / discriminated-union consumers don't break when AFK lands.
 
 #### UserJoinedRoom
 To: `room-{roomId}`
@@ -319,8 +328,10 @@ Managed by `EnsureCreated()`. Snake_case via `EFCore.NamingConventions`. Identit
 | `sessions` | `id uuid PK`, `user_id uuid FK`, `created_at`, `last_seen_at`, `is_revoked bool` |
 | `rooms` | `id uuid PK`, `name text UNIQUE`, `description text`, `created_at`, `created_by_id uuid FK`, `current_watermark bigint NOT NULL DEFAULT 0` |
 | `room_memberships` | `room_id uuid`, `user_id uuid` — composite PK, `joined_at` |
-| `messages` | `id uuid PK` (= idempotency key), `room_id uuid FK`, `author_id uuid FK`, `content text`, `sent_at`, `watermark bigint NOT NULL` |
+| `messages` | `id uuid PK` (= idempotency key), `room_id uuid FK ON DELETE CASCADE`, `author_id uuid FK NULL ON DELETE SET NULL`, `content text`, `sent_at`, `watermark bigint NOT NULL` |
 | `user_presence` | `user_id uuid PK`, `status text`, `last_heartbeat_at` |
 | `room_unreads` | `user_id uuid`, `room_id uuid` — composite PK, `count int`, `last_read_message_id uuid` |
 
 Index: `ix_messages_room_watermark` on `(room_id, watermark DESC)` — required for efficient cursor pagination. Add via `HasIndex` in `OnModelCreating`.
+
+**Cascade rationale:** `messages.author_id` is nullable with `ON DELETE SET NULL` so Phase 2 account deletion doesn't need to fan out into every historical message. The author-mapping layer substitutes a `[deleted user]` placeholder username when `author_id` is null — DTOs keep `authorId` / `authorUsername` non-nullable for Phase 1 consumers. `messages.room_id` cascades on room deletion (Phase 2 room delete nukes its history in one statement). These behaviors must be set on the FK relationships in `OnModelCreating` — EF Core defaults would `Restrict` and break Phase 2 deletion flows.
