@@ -1,7 +1,9 @@
 using Api.Data;
 using Api.Domain;
 using Api.Features.Auth;
+using Api.Features.Messages;
 using Api.Features.Presence;
+using Api.Features.Rooms;
 using Api.Hubs;
 using Api.Infrastructure;
 using Microsoft.AspNetCore.Identity;
@@ -110,6 +112,8 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok", timestamp = DateTime
    .WithName("Health");
 
 app.MapAuthEndpoints();
+app.MapRoomsEndpoints();
+app.MapMessagesEndpoints();
 app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization();
 
 app.Run();
