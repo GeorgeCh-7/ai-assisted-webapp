@@ -123,7 +123,7 @@ Docker Compose can only bind ports in one worktree at a time. **Track A owns the
 - → **Merge to `main`**
 
 **Merge 2 checkpoint** (target: ~4 h after Merge 1):
-- `ChatHub` — `[Authorize]`, `OnConnectedAsync` / `OnDisconnectedAsync`, `JoinRoom`, `LeaveRoom`, `SendMessage` with idempotency dedup, `Heartbeat`
+- `ChatHub` — `[Authorize]`, `OnConnectedAsync` / `OnDisconnectedAsync`, `JoinRoom`, `LeaveRoom`, `SendMessage` with idempotency dedup **and content-length validation (≤ 3072 UTF-8 bytes; reject with `Error { code: "MESSAGE_TOO_LARGE" }`)**, `Heartbeat`
 - `JoinRoom` returns `{ currentWatermark: long }` to caller
 - Watermark: on each `SendMessage`, atomically `UPDATE rooms SET current_watermark = current_watermark + 1 WHERE id = @roomId RETURNING current_watermark` (in a transaction); assign result to `Message.Watermark`
 - `Room.CurrentWatermark` and `Message.Watermark` columns in schema; `HasIndex(m => new { m.RoomId, m.Watermark })` in `OnModelCreating` (required for pagination performance at 100K+ rows)
@@ -161,7 +161,7 @@ Docker Compose can only bind ports in one worktree at a time. **Track A owns the
 - `useSendMessage`: generates `idempotencyKey` once, retries with same key (TanStack Query `retry: 3`); on SignalR reconnect, re-sends any message pending at disconnect
 - `useMessageHistory` uses `useInfiniteQuery`; `getNextPageParam` returns `nextCursor` (the oldest watermark on the page); `MessageList` attaches an intersection observer to the top sentinel element to trigger `fetchNextPage` as the user scrolls up
 - `useHeartbeat`: sends `Heartbeat()` every 15 s (no payload). Online/offline is driven by the hub's per-user connection ref-count in `OnConnectedAsync` / `OnDisconnectedAsync`, not by heartbeats — multi-tab users stay online while any tab is connected. Heartbeat only touches `user_presence.last_heartbeat_at` for future AFK detection in Phase 2
-- `PresenceIndicator`: green dot = online, grey = offline — driven by `PresenceChanged` events
+- `PresenceIndicator`: green dot = online, grey = offline — driven by `PresenceChanged` events. The status type includes `'afk'` as a reserved Phase 2 value; Phase 1 never emits it, but the component must handle any non-`'online'` status as grey (no exhaustive switch without a default branch)
 - `useUnread`: increments per-room count on `MessageReceived` when room is not focused; resets to 0 when room is opened
 - All acceptance tests pass against MSW
 - → **Merge to `main`**

@@ -7,16 +7,16 @@
 ### Deliverables
 
 - Serilog configured; SignalR connection ID enriched on every log entry
-- Idempotency key strategy defined: client generates a UUID per send; server deduplicates on insert; SignalR reconnect retries without creating duplicates
-- Auth endpoints: register, login, logout, persistent session (cookie or JWT)
+- Idempotency key strategy defined: client generates a UUID per send; server deduplicates on insert (race-safe, see `docs/contracts.md`); SignalR reconnect retries without creating duplicates
+- Auth endpoints: register, login (by email), logout, persistent session via ASP.NET Identity cookie (not JWT)
 - `ChatHub` (SignalR): connect/disconnect lifecycle, join/leave room groups, broadcast message to room
-- Public room CRUD: create, list (catalog with search), join, leave
-- Real-time messaging in public rooms: send, receive, store, display in chronological order
-- Presence: online/AFK/offline; multi-tab heartbeat; sub-2s propagation via SignalR
+- Public room CRUD: create, list (catalog with search), join, leave (owner cannot leave)
+- Real-time messaging in public rooms: send (≤ 3 KB UTF-8), receive, store, display in chronological order
+- Presence: online / offline only in Phase 1 (AFK reserved for Phase 2); multi-tab coordination via per-user connection ref-count in the hub; sub-2s propagation via SignalR
 - Unread indicator foundation (per-room unread count, cleared on open)
-- Tests: auth logic, message deduplication, room membership rules, SignalR hub integration
+- Tests: auth logic, message deduplication (including race-safe concurrent-same-key path), content-size validation (3 KB boundary), room membership rules (including owner-cannot-leave), pagination correctness, SignalR hub integration, multi-tab presence
 
-**Gate:** Two browser tabs log in as different users, join the same public room, exchange messages, and see each other's presence update in under 2 seconds.
+**Gate:** See `docs/features/phase-1-spec.md` Scorecard. Authoritative version of the gate — the integration scenario requires **two browser profiles** (or one normal + one incognito window); two tabs in the same profile share the session cookie and cannot hold two user sessions.
 
 ---
 
