@@ -14,6 +14,7 @@ The stack, conventions, and recipes. Read this before adding anything.
 | Real-time    | ASP.NET Core SignalR            | First-class .NET WebSocket hub; handles reconnect, groups, presence |
 | Logging      | Serilog                         | Structured logs; SignalR connection ID enriched on every entry |
 | Testing      | xUnit + WebApplicationFactory   | Unit tests for business logic; integration tests for API endpoints |
+| Password hashing | Konscious.Security.Cryptography.Argon2 (Argon2id) | Stronger than BCrypt; plugged in as `IPasswordHasher<AppUser>` after `AddIdentityCore` |
 | XMPP         | XmppDotNet (Phase 3)            | .NET XMPP library for Jabber client + federation |
 | Frontend     | React 18 + TypeScript + Vite    | Dense, low-boilerplate, agent-friendly    |
 | Styling      | TailwindCSS + shadcn/ui         | Copy-paste components, no lock-in         |

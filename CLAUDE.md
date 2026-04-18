@@ -19,6 +19,7 @@ Project: Full-stack hackathon app. Two days. Working demo > production code.
 - Styling: **TailwindCSS + shadcn/ui**. No CSS-in-JS, no CSS Modules, no styled-components.
 - Server state: **TanStack Query**. No Redux, no Zustand, no SWR.
 - Forms: controlled `useState` for simple, **react-hook-form + zod** for complex.
+- Password hashing: **`Konscious.Security.Cryptography.Argon2`** (Argon2id). Registered as custom `IPasswordHasher<AppUser>` after `AddIdentityCore` — last registration wins over Identity's BCrypt default.
 
 ## Commands
 

@@ -1,0 +1,326 @@
+# API Contracts — Phase 1
+
+> **Status: DRAFT — lock this before Track A or Track B writes code.**
+> All changes after lock require explicit agreement from both tracks.
+> Track B mocks against this doc (MSW handlers). Track A implements against it.
+> Drift on this document is the primary Phase 1 failure mode.
+
+---
+
+## Auth Contract
+
+### Session Cookie
+| Field | Value |
+|-------|-------|
+| Name | `.chat.session` |
+| HttpOnly | `true` |
+| SameSite | `Lax` |
+| Secure | `false` in dev |
+| Path | `/` |
+
+### CSRF
+| Field | Value |
+|-------|-------|
+| Seed cookie name | `XSRF-TOKEN` — JS-readable, **not** HttpOnly |
+| Request header | `X-XSRF-TOKEN` |
+| Configured via | `AddAntiforgery(opts => opts.HeaderName = "X-XSRF-TOKEN")` |
+| Seeded by | `GET /api/auth/me` — backend calls `IAntiforgery.GetAndStoreTokens(ctx)` |
+| Required on | Every POST / PUT / PATCH / DELETE |
+
+Frontend rule: the shared fetch wrapper must read `XSRF-TOKEN` from `document.cookie` and echo it as `X-XSRF-TOKEN` on every mutating request.
+
+### CORS (dev)
+`WithOrigins("http://localhost:5173").AllowCredentials()` — must be a specific origin (not `*`) when cookies are involved.
+Fetch wrapper: `credentials: 'include'` on every request.
+
+### /api/auth/me — Bootstrap Call
+Call this immediately after login and on every app load. It seeds the CSRF cookie.
+**Return 401 as JSON — never redirect. The frontend handles routing.**
+
+---
+
+## Error Envelope
+
+Every non-2xx response uses exactly this shape:
+```json
+{ "error": "Human-readable message" }
+```
+No machine-readable codes in Phase 1.
+
+---
+
+## Pagination
+
+**Messages** (backward scroll, newest-first):
+```
+GET /api/rooms/{id}/messages?before={watermark}&limit=50
+```
+`watermark` is the integer watermark of the oldest message currently displayed. Omit → return most recent 50. Results are DESC by watermark.
+
+**Message gap recovery** (ascending from a known watermark):
+```
+GET /api/rooms/{id}/messages?since={watermark}&limit=50
+```
+Returns messages with `watermark > since`, ASC order. Used by SignalR reconnect logic to fill gaps after a disconnect. `before` and `since` are mutually exclusive.
+
+**Rooms catalog** (forward scroll):
+```
+GET /api/rooms?q={search}&cursor={cursor}&limit=20
+```
+Omit `cursor` → first page.
+
+Response wrapper (all):
+```json
+{
+  "items": [...],
+  "nextCursor": "string | null"
+}
+```
+`nextCursor: null` means no more pages.
+
+---
+
+## REST Endpoints
+
+### POST /api/auth/register
+Auth: none. CSRF: none.
+
+Request:
+```json
+{ "username": "string", "email": "string", "password": "string" }
+```
+Response 200:
+```json
+{ "id": "uuid", "username": "string", "email": "string" }
+```
+Errors: `400 { "error": "Username already taken" }` · `400 { "error": "Email already registered" }` · `400 { "error": "Password does not meet requirements" }`
+
+---
+
+### POST /api/auth/login
+Auth: none. CSRF: none.
+Sets `.chat.session` cookie on success.
+
+Request:
+```json
+{ "username": "string", "password": "string" }
+```
+Response 200:
+```json
+{ "id": "uuid", "username": "string", "email": "string" }
+```
+Error: `401 { "error": "Invalid credentials" }`
+
+After login: call `GET /api/auth/me` before any mutations.
+
+---
+
+### POST /api/auth/logout
+Auth: required. CSRF: required.
+Clears `.chat.session` cookie. Marks session revoked in `sessions` table.
+
+Response 200: `{}`
+
+---
+
+### GET /api/auth/me
+Auth: required. **Always seeds `XSRF-TOKEN` cookie.**
+
+Response 200:
+```json
+{ "id": "uuid", "username": "string", "email": "string" }
+```
+Response 401: `{ "error": "Unauthenticated" }`
+
+---
+
+### GET /api/rooms
+Auth: required.
+Query: `q` (search, optional) · `cursor` (optional) · `limit` (default 20, max 50)
+
+Response 200:
+```json
+{
+  "items": [
+    { "id": "uuid", "name": "string", "description": "string", "memberCount": 0, "isMember": false }
+  ],
+  "nextCursor": "string | null"
+}
+```
+
+---
+
+### POST /api/rooms
+Auth: required. CSRF: required.
+Creator is automatically joined as a member.
+
+Request:
+```json
+{ "name": "string", "description": "string" }
+```
+Response 201:
+```json
+{ "id": "uuid", "name": "string", "description": "string", "memberCount": 1, "isMember": true }
+```
+Errors: `400 { "error": "Name is required" }` · `409 { "error": "Room name already taken" }`
+
+---
+
+### GET /api/rooms/{id}
+Auth: required.
+
+Response 200:
+```json
+{ "id": "uuid", "name": "string", "description": "string", "memberCount": 0, "isMember": false }
+```
+Response 404: `{ "error": "Room not found" }`
+
+---
+
+### POST /api/rooms/{id}/join
+Auth: required. CSRF: required.
+
+Response 200:
+```json
+{ "id": "uuid", "name": "string", "description": "string", "memberCount": 1, "isMember": true }
+```
+Errors: `404 { "error": "Room not found" }` · `409 { "error": "Already a member" }`
+
+---
+
+### POST /api/rooms/{id}/leave
+Auth: required. CSRF: required.
+
+Response 200: `{}`
+
+Errors: `404 { "error": "Room not found" }` · `400 { "error": "Not a member" }`
+
+---
+
+### GET /api/rooms/{id}/messages
+Auth: required. Caller must be a room member.
+Query: `before` (watermark integer, optional) · `since` (watermark integer, optional; mutually exclusive with `before`) · `limit` (default 50, max 50)
+Order: `before` → DESC by watermark (newest-first, for normal scroll). `since` → ASC by watermark (oldest-first, for gap recovery).
+
+Response 200:
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "roomId": "uuid",
+      "authorId": "uuid",
+      "authorUsername": "string",
+      "content": "string",
+      "sentAt": "2024-01-01T12:00:00Z",
+      "idempotencyKey": "uuid",
+      "watermark": 42
+    }
+  ],
+  "nextCursor": "string | null"
+}
+```
+`id` and `idempotencyKey` are the same value. `watermark` is the room-scoped monotonic integer assigned at insert.
+
+Errors: `403 { "error": "Not a member" }` · `404 { "error": "Room not found" }`
+
+---
+
+## SignalR — ChatHub
+
+**URL:** `/hubs/chat`
+**Hub auth:** `[Authorize]` on hub class. Cookie populates `Context.User` on WS handshake — no separate token handshake needed.
+**Group naming:** `room-{roomId}` (prefix avoids future collision with DM groups).
+
+### Client → Server
+
+#### JoinRoom
+```ts
+{ roomId: string }
+```
+Adds caller to `room-{roomId}`. Hub validates DB membership. On success broadcasts `UserJoinedRoom`.
+**Returns to caller:** `{ currentWatermark: number }` — the room's latest watermark at join time. Client stores this and compares against `lastSeenWatermark` on reconnect to detect gaps.
+
+#### LeaveRoom
+```ts
+{ roomId: string }
+```
+Removes caller from `room-{roomId}`. Broadcasts `UserLeftRoom`.
+
+#### SendMessage
+```ts
+{ roomId: string, content: string, idempotencyKey: string }
+```
+`idempotencyKey`: client-generated UUID. Same value on every retry of the same logical message.
+Hub checks `db.Messages.AnyAsync(m => m.Id == dto.IdempotencyKey)`. If exists: returns existing message, no insert.
+On new message: persists, broadcasts `MessageReceived` to `room-{roomId}`.
+
+#### Heartbeat
+```ts
+{ tabId: string }
+```
+Updates `user_presence.last_heartbeat_at`. If first heartbeat after offline state: marks online, broadcasts `PresenceChanged`.
+
+### Server → Client
+
+#### MessageReceived
+To: `room-{roomId}`
+```ts
+{
+  id: string            // same as idempotencyKey
+  roomId: string
+  authorId: string
+  authorUsername: string
+  content: string
+  sentAt: string        // ISO 8601
+  idempotencyKey: string
+  watermark: number     // room-scoped monotonic integer; client tracks max seen per room
+}
+```
+
+#### PresenceChanged
+To: all room groups the affected user belongs to
+```ts
+{ userId: string, status: 'online' | 'offline' }
+```
+
+#### UserJoinedRoom
+To: `room-{roomId}`
+```ts
+{ userId: string, username: string, roomId: string }
+```
+
+#### UserLeftRoom
+To: `room-{roomId}`
+```ts
+{ userId: string, roomId: string }
+```
+
+### Hub Error Pattern
+Hub methods never throw to callers. On rejection, send to caller only:
+```ts
+// shape
+{ code: string, message: string }
+// event name
+"Error"
+```
+Frontend listens for `"Error"` and surfaces inline. Phase 1 codes: `NOT_MEMBER`, `ROOM_NOT_FOUND`.
+
+---
+
+## DB Schema (reference — Track A owns, Track B uses DTO shapes above)
+
+Managed by `EnsureCreated()`. Snake_case via `EFCore.NamingConventions`. Identity tables renamed in `OnModelCreating`.
+
+| Table | Key columns |
+|-------|-------------|
+| `users` | `id uuid`, `user_name text`, `email text`, `password_hash text` |
+| `user_claims` | Identity default, renamed |
+| `sessions` | `id uuid PK`, `user_id uuid FK`, `created_at`, `last_seen_at`, `is_revoked bool` |
+| `rooms` | `id uuid PK`, `name text UNIQUE`, `description text`, `created_at`, `created_by_id uuid FK`, `current_watermark bigint NOT NULL DEFAULT 0` |
+| `room_memberships` | `room_id uuid`, `user_id uuid` — composite PK, `joined_at` |
+| `messages` | `id uuid PK` (= idempotency key), `room_id uuid FK`, `author_id uuid FK`, `content text`, `sent_at`, `watermark bigint NOT NULL` |
+| `user_presence` | `user_id uuid PK`, `status text`, `last_heartbeat_at` |
+| `room_unreads` | `user_id uuid`, `room_id uuid` — composite PK, `count int`, `last_read_message_id uuid` |
+
+Index: `ix_messages_room_watermark` on `(room_id, watermark DESC)` — required for efficient cursor pagination. Add via `HasIndex` in `OnModelCreating`.
