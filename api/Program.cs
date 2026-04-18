@@ -1,51 +1,111 @@
 using Api.Data;
+using Api.Domain;
+using Api.Features.Auth;
+using Api.Infrastructure;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
+using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// --- Logging ---
+builder.Host.UseSerilog((ctx, cfg) => cfg
+    .ReadFrom.Configuration(ctx.Configuration)
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("App", "ChatApi")
+    .WriteTo.Console(new RenderedCompactJsonFormatter()));
+
 // --- DB ---
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("Default"))
+           .UseSnakeCaseNamingConvention());
+
+// --- Identity ---
+builder.Services
+    .AddIdentityCore<AppUser>(opts =>
+    {
+        opts.Password.RequireNonAlphanumeric = false;
+    })
+    .AddEntityFrameworkStores<AppDbContext>();
+
+builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
+    .AddIdentityCookies();
+
+builder.Services.ConfigureApplicationCookie(opts =>
+{
+    opts.Cookie.Name = ".chat.session";
+    opts.Cookie.SameSite = SameSiteMode.Lax;
+    opts.Cookie.HttpOnly = true;
+    opts.Cookie.SecurePolicy = CookieSecurePolicy.None;
+    opts.Events.OnRedirectToLogin = async ctx =>
+    {
+        ctx.Response.StatusCode = 401;
+        ctx.Response.ContentType = "application/json";
+        await ctx.Response.WriteAsJsonAsync(new { error = "Unauthenticated" });
+    };
+    opts.Events.OnRedirectToAccessDenied = async ctx =>
+    {
+        ctx.Response.StatusCode = 403;
+        ctx.Response.ContentType = "application/json";
+        await ctx.Response.WriteAsJsonAsync(new { error = "Forbidden" });
+    };
+    opts.Events.OnValidatePrincipal = SessionValidation.ValidateAsync;
+});
+
+// Argon2 hasher — registered after AddIdentityCore so it overrides Identity's BCrypt default
+builder.Services.AddSingleton<IPasswordHasher<AppUser>, Argon2PasswordHasher>();
+
+// --- Antiforgery ---
+builder.Services.AddAntiforgery(opts =>
+{
+    opts.HeaderName = "X-XSRF-TOKEN";
+    opts.Cookie.Name = "XSRF-TOKEN";
+    opts.Cookie.HttpOnly = false; // must be JS-readable
+    opts.Cookie.SameSite = SameSiteMode.Lax;
+});
+
+// --- SignalR ---
+builder.Services.AddSignalR();
 
 // --- Swagger ---
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// --- CORS (open for hackathon; tighten later) ---
+// --- CORS — specific origin required when cookies are involved ---
 const string DevCors = "DevCors";
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(DevCors, policy => policy
-        .AllowAnyOrigin()
+        .WithOrigins("http://localhost:5173")
+        .AllowCredentials()
         .AllowAnyMethod()
         .AllowAnyHeader());
 });
 
 var app = builder.Build();
 
-// --- Auto-apply schema on startup ---
-// EnsureCreated is fine for hackathon; switch to Migrate() when you add migrations.
+// --- Schema ---
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
 }
 
+// Middleware order is significant — CORS before auth, auth before antiforgery
 app.UseCors(DevCors);
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseAntiforgery();
+
 app.UseSwagger();
 app.UseSwaggerUI();
 
 // --- Routes ---
 app.MapGet("/", () => Results.Redirect("/swagger"));
+app.MapGet("/health", () => Results.Ok(new { status = "ok", timestamp = DateTime.UtcNow }))
+   .WithName("Health");
 
-app.MapGet("/health", () => Results.Ok(new
-{
-    status = "ok",
-    timestamp = DateTime.UtcNow
-}))
-.WithName("Health");
-
-// Add more endpoint groups below as you build features:
-// app.MapGroup("/api/items").MapItemsEndpoints();
+app.MapAuthEndpoints();
 
 app.Run();
