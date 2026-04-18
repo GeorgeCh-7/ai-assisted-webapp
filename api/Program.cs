@@ -1,6 +1,8 @@
 using Api.Data;
 using Api.Domain;
 using Api.Features.Auth;
+using Api.Features.Presence;
+using Api.Hubs;
 using Api.Infrastructure;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -65,8 +67,9 @@ builder.Services.AddAntiforgery(opts =>
     opts.Cookie.SameSite = SameSiteMode.Lax;
 });
 
-// --- SignalR ---
+// --- SignalR + Presence ---
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<PresenceService>();
 
 // --- Swagger ---
 builder.Services.AddEndpointsApiExplorer();
@@ -107,5 +110,6 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok", timestamp = DateTime
    .WithName("Health");
 
 app.MapAuthEndpoints();
+app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization();
 
 app.Run();
