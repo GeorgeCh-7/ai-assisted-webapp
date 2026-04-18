@@ -3,6 +3,7 @@ import { useMe } from './features/auth/useAuth'
 import LoginPage from './features/auth/LoginPage'
 import RegisterPage from './features/auth/RegisterPage'
 import RoomCatalogPage from './features/rooms/RoomCatalogPage'
+import ChatWindow from './features/chat/ChatWindow'
 
 function ProtectedRoute() {
   const { data: user, isPending, error } = useMe()
@@ -28,14 +29,7 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Navigate to="/rooms" replace />} />
         <Route path="/rooms" element={<RoomCatalogPage />} />
-        <Route
-          path="/rooms/:roomId"
-          element={
-            <div className="flex min-h-screen items-center justify-center">
-              <p className="text-muted-foreground text-sm font-mono">Chat — Chunk C</p>
-            </div>
-          }
-        />
+        <Route path="/rooms/:roomId" element={<ChatWindow />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
