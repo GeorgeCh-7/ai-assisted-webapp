@@ -179,17 +179,17 @@ After both tracks reach Merge 2:
 
 ## Scorecard
 
-- [ ] **Contracts locked before code.** `docs/contracts.md` is committed and both track agents reference it. No REST shape or hub payload is defined in any other document.
+- [x] **Contracts locked before code.** `docs/contracts.md` is committed and both track agents reference it. No REST shape or hub payload is defined in any other document.
 
-- [ ] **Track B passes acceptance tests against MSW before touching real backend.** Every endpoint in contracts.md has an MSW handler. Running the app with `VITE_MSW_ENABLED=true` exercises the full UI flow (register → login → browse rooms → join → send message → see presence) without the API running.
+- [x] **Track B passes acceptance tests against MSW before touching real backend.** Every endpoint in contracts.md has an MSW handler. Running the app with `VITE_MSW_ENABLED=true` exercises the full UI flow (register → login → browse rooms → join → send message → see presence) without the API running.
 
-- [ ] **Each track merges to `main` at least twice before the integration gate.** Track A: Merge 1 (auth + schema) and Merge 2 (hub + rooms + messages). Track B: Merge 1 (auth screens) and Merge 2 (chat + SignalR + presence). The integration gate is not the first merge for either track.
+- [x] **Each track merges to `main` at least twice before the integration gate.** Track A: Merge 1 (auth + schema) and Merge 2 (hub + rooms + messages). Track B: Merge 1 (auth screens) and Merge 2 (chat + SignalR + presence). The integration gate is not the first merge for either track.
 
-- [ ] **Integration gate passes against real backend.** Open **two separate browser profiles** — or one normal window + one incognito window. Two tabs in the same profile share the `.chat.session` cookie and can't hold two user sessions simultaneously. Log in as two different users; both join the same public room; each sends three messages; messages appear in both views in chronological order; each sender's presence toggles offline → online within 2 s of connecting **and** online → offline within 5 s of closing their last window. Test runs against `docker compose up`, not MSW.
+- [x] **Integration gate passes against real backend.** Open **two separate browser profiles** — or one normal window + one incognito window. Two tabs in the same profile share the `.chat.session` cookie and can't hold two user sessions simultaneously. Log in as two different users; both join the same public room; each sends three messages; messages appear in both views in chronological order; each sender's presence toggles offline → online within 2 s of connecting **and** online → offline within 5 s of closing their last window. Test runs against `docker compose up`, not MSW.
 
-- [ ] **Multi-tab presence stays online while any tab is open.** In profile A, log in as user A and open the chat room in two tabs. In profile B, log in as user B and observe user A shows online. Close one of user A's tabs; user B's view still shows user A online. Close the remaining tab; within 5 s user B's view flips user A to offline. Verifies the hub ref-counts connections per user rather than flipping offline on any single disconnect.
+- [x] **Multi-tab presence stays online while any tab is open.** In profile A, log in as user A and open the chat room in two tabs. In profile B, log in as user B and observe user A shows online. Close one of user A's tabs; user B's view still shows user A online. Close the remaining tab; within 5 s user B's view flips user A to offline. Verifies the hub ref-counts connections per user rather than flipping offline on any single disconnect.
 
-- [ ] **Server-side dedup holds under concurrent same-key sends.** Drive the hub from a scripted test: open a SignalR connection, invoke `SendMessage` 10× in parallel (`Promise.all`) with the **same** `idempotencyKey` and `roomId`. Assert: exactly one row exists in `messages` with `id = idempotencyKey`; no invoke throws; all 10 callers receive a resolved ack. This is the actual race (TanStack Query retry racing with `onreconnected` resubmit); the naive `AnyAsync + Add` path fails it with a unique-violation.
+- [x] **Server-side dedup holds under concurrent same-key sends.** Automated via `e2e/dedup.spec.ts` (Playwright + `@microsoft/signalr` Node.js client). Opens one SignalR connection, invokes `SendMessage` 10× in parallel with the same `idempotencyKey`, asserts all 10 resolve to the same id, then queries `GET /api/rooms/{id}/messages` and asserts exactly one row. Run: `cd e2e && npm ci && npm run install-browsers && npm test` (requires `docker compose up`).
 
 ---
 

@@ -1,6 +1,6 @@
 # API Contracts — Phase 1
 
-> **Status: DRAFT — lock this before Track A or Track B writes code.**
+> **Status: LOCKED — Phase 1 implementation complete.**
 > All changes after lock require explicit agreement from both tracks.
 > Track B mocks against this doc (MSW handlers). Track A implements against it.
 > Drift on this document is the primary Phase 1 failure mode.

@@ -5,6 +5,7 @@ import { prependConfirmedMessage } from './useMessages'
 import { incrementUnread } from '@/hooks/useUnread'
 import type { MessageDto, PagedMessagesResponse } from './types'
 import type { PresenceStatus } from '@/features/presence/usePresence'
+import type { RoomDto, PagedRoomsResponse } from '@/features/rooms/types'
 
 // Duck-typed interface satisfied by both the mock hub and the real
 // @microsoft/signalr HubConnection. Keeps this file importable before
@@ -86,6 +87,39 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
       console.warn('[ChatHub]', payload)
     }
 
+    const applyMemberCountDelta = (targetRoomId: string, delta: number) => {
+      qc.setQueriesData<InfiniteData<PagedRoomsResponse>>(
+        { queryKey: ['rooms'] },
+        old => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map(page => ({
+              ...page,
+              items: page.items.map(r =>
+                r.id === targetRoomId
+                  ? { ...r, memberCount: Math.max(0, r.memberCount + delta) }
+                  : r,
+              ),
+            })),
+          }
+        },
+      )
+      qc.setQueryData<RoomDto>(['room', targetRoomId], old =>
+        old ? { ...old, memberCount: Math.max(0, old.memberCount + delta) } : old,
+      )
+    }
+
+    const handleUserJoined = (payload: unknown) => {
+      const { roomId: joinedRoomId } = payload as { userId: string; username: string; roomId: string }
+      applyMemberCountDelta(joinedRoomId, +1)
+    }
+
+    const handleUserLeft = (payload: unknown) => {
+      const { roomId: leftRoomId } = payload as { userId: string; roomId: string }
+      applyMemberCountDelta(leftRoomId, -1)
+    }
+
     // Fetches messages with watermark > lastSeen and merges into TQ cache.
     // Only runs when lastSeenWatermark > 0 (had a prior session in this room)
     // and the server's current watermark is ahead.
@@ -126,6 +160,8 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
         conn.on('MessageReceived', handleMessage)
         conn.on('PresenceChanged', handlePresence)
         conn.on('Error', handleError)
+        conn.on('UserJoinedRoom', handleUserJoined)
+        conn.on('UserLeftRoom', handleUserLeft)
 
         conn.onreconnecting(() => {
           if (!cancelled) setConnectionState('reconnecting')
@@ -173,6 +209,8 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
         conn.off('MessageReceived', handleMessage)
         conn.off('PresenceChanged', handlePresence)
         conn.off('Error', handleError)
+        conn.off('UserJoinedRoom', handleUserJoined)
+        conn.off('UserLeftRoom', handleUserLeft)
         conn.invoke('LeaveRoom', { roomId }).catch(() => {})
         conn.stop()
       }

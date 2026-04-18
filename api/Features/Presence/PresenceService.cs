@@ -10,7 +10,7 @@ namespace Api.Features.Presence;
 // until SignalR reconnect repopulates this map.
 public sealed class PresenceService
 {
-    private static readonly ConcurrentDictionary<Guid, int> _connections = new();
+    private readonly ConcurrentDictionary<Guid, int> _connections = new();
 
     // Returns true when the user transitions to 1 (just came online, 0→1).
     public async Task<bool> ConnectAsync(Guid userId, AppDbContext db)
@@ -25,6 +25,10 @@ public sealed class PresenceService
     // Returns true when the user transitions to 0 (just went offline, 1→0).
     public async Task<bool> DisconnectAsync(Guid userId, AppDbContext db)
     {
+        // Guard: if userId was never tracked (e.g. server restart cleared the map mid-session),
+        // AddOrUpdate with addValue:0 would insert 0 and spuriously trigger an offline broadcast.
+        if (!_connections.TryGetValue(userId, out _)) return false;
+
         var newCount = _connections.AddOrUpdate(userId, addValue: 0, updateValueFactory: (_, n) => Math.Max(0, n - 1));
         if (newCount != 0) return false;
 

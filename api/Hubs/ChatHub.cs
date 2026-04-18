@@ -202,14 +202,23 @@ public class ChatHub : Hub
 
     private async Task<long> NextWatermarkAsync(Guid roomId)
     {
-        // Atomic increment — returns new watermark. Hole on concurrent dedup catch is acceptable.
-        await _db.Database.ExecuteSqlRawAsync(
-            "UPDATE rooms SET current_watermark = current_watermark + 1 WHERE id = {0}", roomId);
-
-        return await _db.Rooms
-            .Where(r => r.Id == roomId)
-            .Select(r => r.CurrentWatermark)
-            .FirstAsync();
+        // EF Core wraps SqlQueryRaw<T> in "SELECT … FROM (your_sql) s", which Postgres rejects
+        // for DML statements. Drop to ADO.NET directly so UPDATE…RETURNING stays a single
+        // atomic round-trip and avoids the SELECT-after-UPDATE race.
+        await _db.Database.OpenConnectionAsync();
+        try
+        {
+            var conn = (NpgsqlConnection)_db.Database.GetDbConnection();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                "UPDATE rooms SET current_watermark = current_watermark + 1 WHERE id = $1 RETURNING current_watermark";
+            cmd.Parameters.AddWithValue(roomId);
+            return Convert.ToInt64(await cmd.ExecuteScalarAsync());
+        }
+        finally
+        {
+            await _db.Database.CloseConnectionAsync();
+        }
     }
 
     private async Task IncrementUnreadsAsync(Guid roomId, Guid senderUserId, Guid messageId)
