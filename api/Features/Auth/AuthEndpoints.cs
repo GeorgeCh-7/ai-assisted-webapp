@@ -82,7 +82,15 @@ public static class AuthEndpoints
         HttpContext httpContext,
         IAntiforgery antiforgery)
     {
-        antiforgery.GetAndStoreTokens(httpContext);
+		var tokens = antiforgery.GetAndStoreTokens(httpContext);
+		httpContext.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!, new CookieOptions
+		{
+			HttpOnly = false,                       // frontend JS must read this
+			SameSite = SameSiteMode.Lax,
+			Secure = false,                         // dev only; flip per environment in prod
+			Path = "/",
+			IsEssential = true
+		});
 
         var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (userId is null) return Results.Json(new { error = "Unauthenticated" }, statusCode: 401);

@@ -66,10 +66,11 @@ builder.Services.AddSingleton<IPasswordHasher<AppUser>, Argon2PasswordHasher>();
 // --- Antiforgery ---
 builder.Services.AddAntiforgery(opts =>
 {
-    opts.HeaderName = "X-XSRF-TOKEN";
-    opts.Cookie.Name = "XSRF-TOKEN";
-    opts.Cookie.HttpOnly = false; // must be JS-readable
-    opts.Cookie.SameSite = SameSiteMode.Lax;
+	opts.HeaderName = "X-XSRF-TOKEN";
+	opts.Cookie.Name = ".chat.antiforgery";    // internal encrypted cookie token
+	opts.Cookie.HttpOnly = true;               // internal, no JS access
+	opts.Cookie.SameSite = SameSiteMode.Lax;
+	opts.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;  // false in dev, true in prod
 });
 
 // --- SignalR + Presence ---
