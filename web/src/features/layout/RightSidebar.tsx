@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useRooms } from '@/features/rooms/useRooms'
 import { useUnreadCount } from '@/hooks/useUnread'
 import { Badge } from '@/components/ui/badge'
+import DmListSidebar from '@/features/dms/DmListSidebar'
 
 export default function RightSidebar() {
   const { roomId: activeRoomId } = useParams<{ roomId?: string }>()
@@ -30,12 +31,16 @@ export default function RightSidebar() {
         )}
       </div>
 
-      {/* Contacts section — populated in Merge 2 */}
-      <div className="mt-auto border-t px-2 py-2 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60">
-        Contacts
+      {/* Direct Messages */}
+      <div className="mt-2 border-t px-2 py-2 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60">
+        Direct Messages
       </div>
-      <div className="px-3 pb-3 text-xs text-muted-foreground font-mono">
-        <Link to="/friends" className="hover:underline underline-offset-2">
+      <DmListSidebar />
+      <div className="border-t px-2 py-2">
+        <Link
+          to="/friends"
+          className="text-[10px] font-mono text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+        >
           Manage contacts →
         </Link>
       </div>

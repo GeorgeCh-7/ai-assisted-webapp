@@ -49,3 +49,5 @@ export type PagedDmThreadsResponse = {
   items: DmThreadListItem[]
   nextCursor: string | null
 }
+
+export type OptimisticDmMessage = DmMessageDto & { pending: true }

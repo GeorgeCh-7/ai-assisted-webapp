@@ -7,6 +7,7 @@ import ResetPasswordPage from './features/auth/ResetPasswordPage'
 import RoomCatalogPage from './features/rooms/RoomCatalogPage'
 import ChatWindow from './features/chat/ChatWindow'
 import FriendsPage from './features/friends/FriendsPage'
+import DmWindow from './features/dms/DmWindow'
 import SessionsPage from './features/sessions/SessionsPage'
 import ChangePasswordPage from './features/auth/ChangePasswordPage'
 import TopNav from './features/layout/TopNav'
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/rooms" element={<RoomCatalogPage />} />
         <Route path="/rooms/:roomId" element={<ChatWindow />} />
         <Route path="/friends" element={<FriendsPage />} />
+        <Route path="/dms/:threadId" element={<DmWindow />} />
         <Route path="/sessions" element={<SessionsPage />} />
         <Route path="/auth/change-password" element={<ChangePasswordPage />} />
       </Route>
