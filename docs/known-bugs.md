@@ -1,6 +1,17 @@
-# Known Bugs — End of Phase 2
+# Known Bugs — End of Phase 3
 
-These are intentionally deferred to Phase 3 or post-hackathon polish. Do not treat as new Phase 3 scope without explicit decision.
+## Resolved in Phase 3
+
+- **Bug 2** (new rooms don't appear without refresh) — fixed via `RoomCreated` broadcast to `public-rooms-catalog` SignalR group.
+- **Bug 3** (new DM threads don't appear without refresh) — fixed via `DmThreadCreated` broadcast on first thread creation.
+- **Bug 4** (user-scoped events lost on non-room pages) — fixed via shared `HubProvider` at App root.
+- **Data protection key regeneration on API restart** — fixed by mounting `dp_keys` volume at `/root/.aspnet/DataProtection-Keys`.
+
+---
+
+## Phase 2 Bugs Still Deferred
+
+These were intentionally not fixed in Phase 3. Do not treat as new scope without an explicit decision.
 
 ## Bug 1 — Private rooms appear in public catalog
 - Observed: user C (not a member of any private room) sees private rooms in the public catalog

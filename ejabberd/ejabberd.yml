@@ -1,0 +1,93 @@
+hosts:
+  - "chat.local"
+
+loglevel: warning
+
+listen:
+  -
+    port: 5222
+    ip: "::"
+    module: ejabberd_c2s
+    max_stanza_size: 262144
+    shaper: c2s_shaper
+    access: c2s
+    # TLS is offered but not required; bridge connects over plain TCP inside docker
+    starttls_required: false
+
+  -
+    port: 5280
+    ip: "::"
+    module: ejabberd_http
+    request_handlers:
+      /api: mod_http_api
+
+# Allow PLAIN SASL on unencrypted connections (safe inside docker network)
+disable_sasl_mechanisms: []
+
+acl:
+  admin:
+    user:
+      - "admin": "chat.local"
+  local:
+    user_regexp: ""
+  loopback:
+    ip:
+      - "127.0.0.0/8"
+      - "::1/128"
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
+
+api_permissions:
+  "admin access":
+    who:
+      acl: loopback
+    what: "*"
+
+access_rules:
+  local:
+    allow: local
+  c2s:
+    deny: blocked
+    allow: all
+  register:
+    allow: all
+
+shaper:
+  normal:
+    rate: 3000
+    burst_size: 20000
+
+shaper_rules:
+  max_user_sessions: 10
+  c2s_shaper:
+    none: admin
+    normal: all
+
+auth_method:
+  - internal
+
+modules:
+  mod_adhoc: {}
+  mod_caps: {}
+  mod_disco: {}
+  mod_last: {}
+  mod_muc:
+    access:
+      - allow: local
+    access_create: local
+    access_persistent: local
+    default_room_options:
+      persistent: true
+      public: true
+  mod_ping: {}
+  mod_privacy: {}
+  mod_private: {}
+  mod_register:
+    access: register
+  mod_roster: {}
+  mod_stream_mgmt: {}
+  mod_vcard: {}
+  mod_version:
+    show_os: false
+  mod_http_api: {}

@@ -1,6 +1,7 @@
 using Api.Data;
 using Api.Domain;
 using Api.Features.Auth;
+using Api.Features.XmppBridge;
 using Api.Features.Dms;
 using Api.Features.Files;
 using Api.Features.Friends;
@@ -89,6 +90,7 @@ builder.Services.AddSingleton<FileStorageService>();
 // --- Background services ---
 builder.Services.AddHostedService<AfkSweeper>();
 builder.Services.AddHostedService<OrphanFileSweeper>();
+builder.Services.AddHostedService<XmppBridgeService>();
 
 // --- Swagger ---
 builder.Services.AddEndpointsApiExplorer();

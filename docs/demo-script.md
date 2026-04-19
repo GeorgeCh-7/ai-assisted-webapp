@@ -12,7 +12,7 @@
 - Pre-seed at least one public room (`#general`) and join both accounts before the demo clock starts.
 - Clear browser zoom — aim for legible text on a shared screen.
 - Close unrelated tabs, DevTools, and the TanStack Query devtools panel (click the button at bottom-right to collapse).
-- If Slice 7 shipped: start Gajim, verify MUC `bridge@conference.chat.local` joins cleanly.
+- Start Gajim. Add server `localhost:5222` (no TLS). Log in as `gajim-user-a@chat.local` / `Test123!`. Join MUC `bridge@conference.chat.local`. Verify `bridge-bot` presence appears in the member list — that confirms the bridge is live.
 
 **Target runtime: 6 minutes end-to-end.** If rehearsal goes over 7 min, cut Act 5 first.
 
@@ -83,27 +83,33 @@
 
 ---
 
-## Act 6 — XMPP (only if Slice 7 shipped)
+## Act 6 — XMPP bridge (shipped, one-way)
 
-**Full bridge shipped:**
-1. Open Gajim. Show MUC `bridge@conference.chat.local` connected.
-2. Gajim user sends a message. It appears in Alice's room view within 3s, badged "via Jabber".
-3. Alice replies in-app — Gajim receives the reply.
+**Gajim setup (before judges join):**
+- Server: `localhost`, port `5222`, no TLS
+- Account A: `gajim-user-a@chat.local` / `Test123!`
+- Account B: `gajim-user-b@chat.local` / `Test123!`
+- Both accounts join MUC: `bridge@conference.chat.local`
 
-**ejabberd standalone only:**
-1. Open Gajim, connect to ejabberd. Show Connected state.
-2. Second Gajim account joins the MUC, exchange a message.
-3. Narrate: "ejabberd is running alongside our server. The bridge into our app was cut at the budget gate — `docs/xmpp-design.md` has the full architecture."
+**Demo steps:**
+1. Open Gajim. Show the MUC `bridge@conference.chat.local` — both gajim-user-a and gajim-user-b are members. The `bridge-bot` presence is also visible (that's our .NET bridge).
+2. `gajim-user-a` types a message and sends it in the MUC.
+3. **Alice's `#general` room shows the message within ~2s, badged "via Jabber".** The author shows as `gajim-user-a` (the `xmpp:` prefix is stripped in the UI).
+4. Repeat with `gajim-user-b` — two different Jabber identities, both bridged.
 
-**Not shipped:** Skip Act 6 entirely. Mention briefly in the close.
+**Narration:**
+- "ejabberd runs as a separate service in the same `docker compose up`. Our .NET `XmppBridgeService` connects as `bridge-bot`, joins the MUC, and mirrors every groupchat message into the `#general` room via SignalR — so all connected clients see it in real time."
+- "Bridge is one-way for the demo (XMPP → app). Reverse direction would add ~3h — `docs/roadmap.md` notes it as a deferred stretch."
+
+**Known flake:** The bridge requires the `#general` room to exist in the app before it can forward. If the room was not pre-seeded, create it during pre-flight (Act 2 step 1 creates `live-demo`; ensure `general` exists separately).
 
 ---
 
 ## Act 7 — Close (30s)
 
 - "Everything you saw runs in a single `docker compose up`. No external services beyond Postgres."
-- "Phase 3 thesis: real-time UX first, Jabber surface second, with an explicit fallback ladder so XMPP variance can't eat the demo."
-- Point judges to `docs/known-bugs.md` for anything not demoed and `docs/roadmap.md` for what Phase 3 addressed.
+- "Phase 3 thesis: real-time UX first, Jabber surface second. The bridge shipped one-way — XMPP → app — which is the demo-visible direction. Reverse direction is a deferred stretch."
+- Point judges to `docs/known-bugs.md` for deferred items and `docs/roadmap.md` for what Phase 3 delivered.
 
 ---
 
