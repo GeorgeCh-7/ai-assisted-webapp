@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using Api.Data;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Hosting;
@@ -38,6 +39,19 @@ public sealed class TestWebApp : WebApplicationFactory<Program>
     {
         var scope = Services.CreateScope();
         return scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    }
+}
+
+public static class HttpClientExtensions
+{
+    public static Task<HttpResponseMessage> DeleteWithJsonAsync<T>(
+        this HttpClient client, string requestUri, T value)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Delete, requestUri)
+        {
+            Content = JsonContent.Create(value)
+        };
+        return client.SendAsync(request);
     }
 }
 

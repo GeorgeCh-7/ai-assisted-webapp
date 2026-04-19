@@ -219,17 +219,18 @@ public class AppDbContext : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>
             .HasDatabaseName("ix_dm_threads_users_unique")
             .IsUnique();
 
+        // SET NULL on user delete: DM thread survives with null party FK + OtherPartyDeletedAt marker
         builder.Entity<DmThread>()
             .HasOne(dt => dt.UserA)
             .WithMany()
             .HasForeignKey(dt => dt.UserAId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .OnDelete(DeleteBehavior.SetNull);
 
         builder.Entity<DmThread>()
             .HasOne(dt => dt.UserB)
             .WithMany()
             .HasForeignKey(dt => dt.UserBId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .OnDelete(DeleteBehavior.SetNull);
 
         // dm_messages
         builder.Entity<DmMessage>()
