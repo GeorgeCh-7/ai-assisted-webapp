@@ -29,6 +29,10 @@ public class ChatHub : Hub
         using (LogContext.PushProperty("UserId", Context.UserIdentifier))
         {
             var userId = GetUserId();
+
+            // Auto-join personal notification group for invitations, friend requests, bans, etc.
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"user-{userId}");
+
             var wentOnline = await _presence.ConnectAsync(userId, _db);
 
             if (wentOnline)
@@ -253,6 +257,70 @@ public class ChatHub : Hub
         catch { /* unread increment is best-effort */ }
     }
 
+    // --- Phase 2 hub stubs ---
+
+    public async Task<object?> EditMessage(EditMessageArgs args)
+    {
+        using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+        {
+            await Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "EditMessage not yet implemented" });
+            return null;
+        }
+    }
+
+    public async Task<object?> DeleteMessage(DeleteMessageArgs args)
+    {
+        using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+        {
+            await Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "DeleteMessage not yet implemented" });
+            return null;
+        }
+    }
+
+    public async Task<object?> JoinDm(JoinDmArgs args)
+    {
+        using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+        {
+            await Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "JoinDm not yet implemented" });
+            return null;
+        }
+    }
+
+    public async Task LeaveDm(LeaveDmArgs args)
+    {
+        using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+        {
+            await Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "LeaveDm not yet implemented" });
+        }
+    }
+
+    public async Task<object?> SendDirectMessage(SendDirectMessageArgs args)
+    {
+        using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+        {
+            await Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "SendDirectMessage not yet implemented" });
+            return null;
+        }
+    }
+
+    public async Task<object?> EditDirectMessage(EditDirectMessageArgs args)
+    {
+        using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+        {
+            await Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "EditDirectMessage not yet implemented" });
+            return null;
+        }
+    }
+
+    public async Task<object?> DeleteDirectMessage(DeleteDirectMessageArgs args)
+    {
+        using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+        {
+            await Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "DeleteDirectMessage not yet implemented" });
+            return null;
+        }
+    }
+
     private static object MessagePayload(Message msg, string authorUsername) => new
     {
         id = msg.Id.ToString(),
@@ -269,7 +337,28 @@ public class ChatHub : Hub
     };
 }
 
-// Hub method argument records
+// Hub method argument records — Phase 1
 public record JoinRoomArgs(Guid RoomId);
 public record LeaveRoomArgs(Guid RoomId);
-public record SendMessageArgs(Guid RoomId, string Content, Guid IdempotencyKey);
+
+// Phase 2 optional fields added; existing callers sending only the first 3 fields still work
+public record SendMessageArgs(
+    Guid RoomId,
+    string Content,
+    Guid IdempotencyKey,
+    Guid? ReplyToMessageId = null,
+    Guid[]? AttachmentFileIds = null);
+
+// Phase 2 hub argument records
+public record EditMessageArgs(Guid MessageId, string Content);
+public record DeleteMessageArgs(Guid MessageId);
+public record JoinDmArgs(Guid ThreadId);
+public record LeaveDmArgs(Guid ThreadId);
+public record SendDirectMessageArgs(
+    Guid ThreadId,
+    string Content,
+    Guid IdempotencyKey,
+    Guid? ReplyToMessageId = null,
+    Guid[]? AttachmentFileIds = null);
+public record EditDirectMessageArgs(Guid MessageId, string Content);
+public record DeleteDirectMessageArgs(Guid MessageId);
