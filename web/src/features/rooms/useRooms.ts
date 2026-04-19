@@ -50,7 +50,7 @@ export function useLeaveRoom() {
 export function useCreateRoom() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: { name: string; description: string }) =>
+    mutationFn: (data: { name: string; description: string; isPrivate?: boolean }) =>
       api.post<RoomDto>('/api/rooms', data),
     onSuccess: room => {
       qc.setQueryData(['room', room.id], room)
