@@ -1,4 +1,13 @@
-import { db, getCurrentUser, nextWatermark, type MockMessage } from './db'
+import {
+  db,
+  getCurrentUser,
+  nextWatermark,
+  nextDmWatermark,
+  getFriendship,
+  getUserBan,
+  type MockMessage,
+  type MockDmMessage,
+} from './db'
 
 type EventListener = (...args: unknown[]) => void
 
@@ -30,7 +39,6 @@ function handleJoinRoom(arg: InvokeArg): { currentWatermark: number } | null {
   }
   const members = db.memberships.get(roomId)
   if (!members?.has(user.id)) {
-    // Hub validates DB membership; clients must POST /api/rooms/{id}/join before invoking JoinRoom
     emit('Error', { code: 'NOT_MEMBER', message: 'Not a member of this room' })
     return null
   }
@@ -47,10 +55,12 @@ function handleLeaveRoom(arg: InvokeArg): null {
 }
 
 function handleSendMessage(arg: InvokeArg): MockMessage | null {
-  const { roomId, content, idempotencyKey } = arg as {
+  const { roomId, content, idempotencyKey, replyToMessageId = null, attachmentFileIds = [] } = arg as {
     roomId: string
     content: string
     idempotencyKey: string
+    replyToMessageId?: string | null
+    attachmentFileIds?: string[]
   }
 
   if (new TextEncoder().encode(content).length > 3072) {
@@ -61,18 +71,22 @@ function handleSendMessage(arg: InvokeArg): MockMessage | null {
   const user = getCurrentUser()
   if (!user) return null
 
-  // Dedup path 1: already persisted (e.g. TanStack Query retry after a successful send)
+  // Dedup path 1: already persisted
   const existing = db.messages.get(roomId)?.find(m => m.id === idempotencyKey)
   if (existing) return existing
 
-  // Dedup path 2: concurrent duplicate in flight — all callers get the same object.
-  // No await in this function, so all Promise.all branches run synchronously in order:
-  // first caller sets the guard and falls through to insert; every subsequent caller
-  // hits the guard and returns the winner immediately.
+  // Dedup path 2: concurrent duplicate in flight
   const inFlight = db.pendingSends.get(idempotencyKey)
   if (inFlight) return inFlight
 
   const watermark = nextWatermark(roomId)
+  const attachments = (attachmentFileIds as string[]).flatMap(fid => {
+    const f = db.fileAttachments.find(a => a.id === fid)
+    if (!f) return []
+    f.messageId = idempotencyKey
+    return [{ id: f.id, originalFilename: f.originalFilename, contentType: f.contentType, sizeBytes: f.sizeBytes }]
+  })
+
   const msg: MockMessage = {
     id: idempotencyKey,
     roomId,
@@ -84,8 +98,8 @@ function handleSendMessage(arg: InvokeArg): MockMessage | null {
     watermark,
     editedAt: null,
     deletedAt: null,
-    replyToMessageId: null,
-    attachments: [],
+    replyToMessageId: replyToMessageId as string | null,
+    attachments,
   }
 
   db.pendingSends.set(idempotencyKey, msg)
@@ -97,11 +111,219 @@ function handleSendMessage(arg: InvokeArg): MockMessage | null {
   return msg
 }
 
+function handleEditMessage(arg: InvokeArg): MockMessage | null {
+  const { messageId, content } = arg as { messageId: string; content: string }
+  const user = getCurrentUser()
+  if (!user) return null
+
+  if (new TextEncoder().encode(content).length > 3072) {
+    emit('Error', { code: 'MESSAGE_TOO_LARGE', message: 'Message exceeds 3 KB' })
+    return null
+  }
+
+  for (const msgs of db.messages.values()) {
+    const msg = msgs.find(m => m.id === messageId)
+    if (msg) {
+      if (msg.authorId !== user.id) {
+        emit('Error', { code: 'NOT_AUTHOR', message: 'Only the author can edit' })
+        return null
+      }
+      msg.content = content
+      msg.editedAt = new Date().toISOString()
+      emit('MessageEdited', { ...msg, attachments: msg.attachments })
+      return msg
+    }
+  }
+  emit('Error', { code: 'MESSAGE_NOT_FOUND', message: 'Message not found' })
+  return null
+}
+
+function handleDeleteMessage(arg: InvokeArg): { id: string; deletedAt: string } | null {
+  const { messageId } = arg as { messageId: string }
+  const user = getCurrentUser()
+  if (!user) return null
+
+  for (const [roomId, msgs] of db.messages) {
+    const msg = msgs.find(m => m.id === messageId)
+    if (msg) {
+      const myRole = db.memberships.get(roomId)?.get(user.id)
+      const canDelete = msg.authorId === user.id || myRole === 'owner' || myRole === 'admin'
+      if (!canDelete) {
+        emit('Error', { code: 'NOT_ADMIN', message: 'Insufficient permission' })
+        return null
+      }
+      msg.deletedAt = new Date().toISOString()
+      msg.content = ''
+      const result = { id: messageId, roomId, deletedAt: msg.deletedAt }
+      emit('MessageDeleted', result)
+      return result
+    }
+  }
+  emit('Error', { code: 'MESSAGE_NOT_FOUND', message: 'Message not found' })
+  return null
+}
+
+function handleJoinDm(arg: InvokeArg): { currentWatermark: number } | null {
+  const { threadId } = arg as { threadId: string }
+  const user = getCurrentUser()
+  if (!user) return null
+
+  const thread = db.dmThreads.find(t => t.id === threadId)
+  if (!thread || (thread.userAId !== user.id && thread.userBId !== user.id)) {
+    emit('Error', { code: 'DM_THREAD_NOT_FOUND', message: 'Thread not found' })
+    return null
+  }
+  return { currentWatermark: db.dmWatermarks.get(threadId) ?? 0 }
+}
+
+function handleLeaveDm(_arg: InvokeArg): null {
+  return null
+}
+
+function handleSendDirectMessage(arg: InvokeArg): MockDmMessage | null {
+  const {
+    threadId,
+    content,
+    idempotencyKey,
+    replyToMessageId = null,
+    attachmentFileIds = [],
+  } = arg as {
+    threadId: string
+    content: string
+    idempotencyKey: string
+    replyToMessageId?: string | null
+    attachmentFileIds?: string[]
+  }
+
+  const user = getCurrentUser()
+  if (!user) return null
+
+  const thread = db.dmThreads.find(t => t.id === threadId)
+  if (!thread || (thread.userAId !== user.id && thread.userBId !== user.id)) {
+    emit('Error', { code: 'DM_THREAD_NOT_FOUND', message: 'Thread not found' })
+    return null
+  }
+  if (thread.frozenAt || thread.otherPartyDeletedAt) {
+    emit('Error', { code: 'THREAD_FROZEN', message: 'Thread is frozen' })
+    return null
+  }
+
+  const otherId = thread.userAId === user.id ? thread.userBId : thread.userAId
+  const friendship = getFriendship(user.id, otherId)
+  if (!friendship || friendship.status !== 'accepted') {
+    emit('Error', { code: 'NOT_FRIENDS', message: 'Not friends' })
+    return null
+  }
+  if (getUserBan(user.id, otherId) || getUserBan(otherId, user.id)) {
+    emit('Error', { code: 'USER_BANNED', message: 'User banned' })
+    return null
+  }
+
+  if (new TextEncoder().encode(content).length > 3072) {
+    emit('Error', { code: 'MESSAGE_TOO_LARGE', message: 'Message exceeds 3 KB' })
+    return null
+  }
+
+  const existing = db.dmMessages.get(threadId)?.find(m => m.id === idempotencyKey)
+  if (existing) return existing
+
+  const watermark = nextDmWatermark(threadId)
+  const attachments = (attachmentFileIds as string[]).flatMap(fid => {
+    const f = db.fileAttachments.find(a => a.id === fid)
+    if (!f) return []
+    f.dmMessageId = idempotencyKey
+    return [{ id: f.id, originalFilename: f.originalFilename, contentType: f.contentType, sizeBytes: f.sizeBytes }]
+  })
+
+  const msg: MockDmMessage = {
+    id: idempotencyKey,
+    dmThreadId: threadId,
+    authorId: user.id,
+    authorUsername: user.username,
+    content,
+    sentAt: new Date().toISOString(),
+    idempotencyKey,
+    watermark,
+    editedAt: null,
+    deletedAt: null,
+    replyToMessageId: replyToMessageId as string | null,
+    attachments,
+  }
+
+  if (!db.dmMessages.has(threadId)) db.dmMessages.set(threadId, [])
+  db.dmMessages.get(threadId)!.push(msg)
+  emit('DirectMessageReceived', msg)
+
+  // Increment unread for the other party
+  if (!db.dmUnreads.has(otherId)) db.dmUnreads.set(otherId, new Map())
+  const otherUnreads = db.dmUnreads.get(otherId)!
+  otherUnreads.set(threadId, (otherUnreads.get(threadId) ?? 0) + 1)
+
+  return msg
+}
+
+function handleEditDirectMessage(arg: InvokeArg): MockDmMessage | null {
+  const { messageId, content } = arg as { messageId: string; content: string }
+  const user = getCurrentUser()
+  if (!user) return null
+
+  if (new TextEncoder().encode(content).length > 3072) {
+    emit('Error', { code: 'MESSAGE_TOO_LARGE', message: 'Message exceeds 3 KB' })
+    return null
+  }
+
+  for (const msgs of db.dmMessages.values()) {
+    const msg = msgs.find(m => m.id === messageId)
+    if (msg) {
+      if (msg.authorId !== user.id) {
+        emit('Error', { code: 'NOT_AUTHOR', message: 'Only the author can edit' })
+        return null
+      }
+      msg.content = content
+      msg.editedAt = new Date().toISOString()
+      emit('DirectMessageEdited', msg)
+      return msg
+    }
+  }
+  emit('Error', { code: 'MESSAGE_NOT_FOUND', message: 'Message not found' })
+  return null
+}
+
+function handleDeleteDirectMessage(arg: InvokeArg): { id: string; dmThreadId: string; deletedAt: string } | null {
+  const { messageId } = arg as { messageId: string }
+  const user = getCurrentUser()
+  if (!user) return null
+
+  for (const [threadId, msgs] of db.dmMessages) {
+    const msg = msgs.find(m => m.id === messageId)
+    if (msg) {
+      if (msg.authorId !== user.id) {
+        emit('Error', { code: 'NOT_AUTHOR', message: 'Only the author can delete in DMs' })
+        return null
+      }
+      msg.deletedAt = new Date().toISOString()
+      msg.content = ''
+      const result = { id: messageId, dmThreadId: threadId, deletedAt: msg.deletedAt }
+      emit('DirectMessageDeleted', result)
+      return result
+    }
+  }
+  emit('Error', { code: 'MESSAGE_NOT_FOUND', message: 'Message not found' })
+  return null
+}
+
 const invokeHandlers: Record<string, (arg: InvokeArg) => unknown> = {
   JoinRoom: handleJoinRoom,
   LeaveRoom: handleLeaveRoom,
   SendMessage: handleSendMessage,
-  Heartbeat: () => null, // updates last_heartbeat_at server-side only; no broadcast in Phase 1
+  EditMessage: handleEditMessage,
+  DeleteMessage: handleDeleteMessage,
+  JoinDm: handleJoinDm,
+  LeaveDm: handleLeaveDm,
+  SendDirectMessage: handleSendDirectMessage,
+  EditDirectMessage: handleEditDirectMessage,
+  DeleteDirectMessage: handleDeleteDirectMessage,
+  Heartbeat: () => null,
 }
 
 // ── Mock HubConnection ─────────────────────────────────────────────────────────
@@ -189,13 +411,34 @@ export function emitSignalREvent(event: string, payload: unknown): void {
   emit(event, payload)
 }
 
-// Usage from DevTools:
-//   window.__mockHub__.emit('PresenceChanged', { userId: '...', status: 'offline' })
-//   window.__mockHub__.emit('MessageReceived', { id: '...', roomId: '...', ... })
+// Simulate a RoomInvitationReceived for the current user (call from DevTools)
+export function mockInviteCurrentUser(roomId: string, roomName: string, invitedByUsername: string): void {
+  emit('RoomInvitationReceived', {
+    invitationId: crypto.randomUUID(),
+    roomId,
+    roomName,
+    invitedByUsername,
+    createdAt: new Date().toISOString(),
+  })
+}
+
+// Simulate a FriendRequestReceived for the current user
+export function mockFriendRequest(fromUserId: string, fromUsername: string, message: string | null = null): void {
+  emit('FriendRequestReceived', { fromUserId, fromUsername, message, requestedAt: new Date().toISOString() })
+}
+
 if (import.meta.env.VITE_MSW_ENABLED === 'true') {
   ;(
     window as Window & {
-      __mockHub__?: { emit: typeof emitSignalREvent }
+      __mockHub__?: {
+        emit: typeof emitSignalREvent
+        invite: typeof mockInviteCurrentUser
+        friendRequest: typeof mockFriendRequest
+      }
     }
-  ).__mockHub__ = { emit: emitSignalREvent }
+  ).__mockHub__ = {
+    emit: emitSignalREvent,
+    invite: mockInviteCurrentUser,
+    friendRequest: mockFriendRequest,
+  }
 }

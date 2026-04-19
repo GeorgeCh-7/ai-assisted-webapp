@@ -1,3 +1,6 @@
+// Lightweight attachment shape on mock messages (matches FileAttachmentDto)
+export type AttachmentDto = { id: string; originalFilename: string; contentType: string; sizeBytes: number }
+
 export type RoomRole = 'owner' | 'admin' | 'member'
 export type PresenceStatus = 'online' | 'afk' | 'offline'
 export type FriendshipStatus = 'pending' | 'accepted'
@@ -30,7 +33,7 @@ export type MockMessage = {
   editedAt: string | null
   deletedAt: string | null
   replyToMessageId: string | null
-  attachments: MockFileAttachment[]
+  attachments: AttachmentDto[]
 }
 
 export type MockDmMessage = {
@@ -45,7 +48,7 @@ export type MockDmMessage = {
   editedAt: string | null
   deletedAt: string | null
   replyToMessageId: string | null
-  attachments: MockFileAttachment[]
+  attachments: AttachmentDto[]
 }
 
 export type MockDmThread = {
