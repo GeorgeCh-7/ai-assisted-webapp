@@ -112,6 +112,7 @@ public static class MessageMutationEndpoints
         editedAt = msg.EditedAt,
         deletedAt = msg.DeletedAt,
         replyToMessageId = msg.ReplyToMessageId?.ToString(),
+        attachments = Array.Empty<object>(),
     };
 
     private static Guid GetUserId(ClaimsPrincipal user) =>

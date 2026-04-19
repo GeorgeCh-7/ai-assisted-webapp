@@ -94,7 +94,8 @@ public static class MessagesEndpoints
             m.Watermark,
             m.EditedAt,
             m.DeletedAt,
-            m.ReplyToMessageId));
+            m.ReplyToMessageId,
+            Array.Empty<FileAttachmentResponse>()));
 
         return Results.Ok(new PagedResponse<MessageResponse>(items, nextCursor));
     }

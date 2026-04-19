@@ -1,5 +1,11 @@
 namespace Api.Features.Messages;
 
+public record FileAttachmentResponse(
+    Guid Id,
+    string OriginalFilename,
+    string ContentType,
+    long SizeBytes);
+
 public record MessageResponse(
     Guid Id,
     Guid RoomId,
@@ -11,4 +17,5 @@ public record MessageResponse(
     long Watermark,
     DateTime? EditedAt,
     DateTime? DeletedAt,
-    Guid? ReplyToMessageId);
+    Guid? ReplyToMessageId,
+    IReadOnlyList<FileAttachmentResponse> Attachments);
