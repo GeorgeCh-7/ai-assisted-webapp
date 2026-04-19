@@ -126,9 +126,17 @@ export type RoomDto = {
   myRole: RoomRole | null
 }
 
+export type MockPasswordResetToken = {
+  token: string
+  userId: string
+  expiresAt: string
+  consumed: boolean
+}
+
 export const db = {
   users: [] as MockUser[],
   sessionUserId: null as string | null,
+  sessionId: null as string | null,
   rooms: new Map<string, MockRoom>(),
   memberships: new Map<string, Map<string, RoomRole>>(),
   messages: new Map<string, MockMessage[]>(),
@@ -137,6 +145,7 @@ export const db = {
   pendingSends: new Map<string, MockMessage>(),
 
   // Phase 2 state
+  passwordResetTokens: [] as MockPasswordResetToken[],
   friendships: [] as MockFriendship[],
   userBans: [] as MockUserBan[],
   dmThreads: [] as MockDmThread[],
