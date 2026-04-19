@@ -10,6 +10,7 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [keepMeSignedIn, setKeepMeSignedIn] = useState(false)
   const { mutate: login, isPending, error } = useLogin()
 
   const errorMessage =
@@ -18,7 +19,7 @@ export default function LoginPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     login(
-      { email, password },
+      { email, password, keepMeSignedIn },
       { onSuccess: () => navigate('/rooms') },
     )
   }
@@ -60,6 +61,16 @@ export default function LoginPage() {
                 disabled={isPending}
               />
             </div>
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={keepMeSignedIn}
+                onChange={e => setKeepMeSignedIn(e.target.checked)}
+                disabled={isPending}
+                className="h-3.5 w-3.5"
+              />
+              Keep me signed in
+            </label>
             {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
             <Button type="submit" className="w-full" disabled={isPending}>
               {isPending ? 'Signing in…' : 'Sign in'}

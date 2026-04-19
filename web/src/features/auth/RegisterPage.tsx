@@ -32,7 +32,7 @@ export default function RegisterPage() {
       { username, email, password },
       {
         onSuccess: () => {
-          login({ email, password }, { onSuccess: () => navigate('/rooms') })
+          login({ email, password, keepMeSignedIn: false }, { onSuccess: () => navigate('/rooms') })
         },
       },
     )

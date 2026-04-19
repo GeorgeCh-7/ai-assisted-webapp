@@ -17,7 +17,7 @@ import {
 } from './db'
 
 type RegisterBody = { username?: string; email?: string; password?: string }
-type LoginBody = { email?: string; password?: string }
+type LoginBody = { email?: string; password?: string; keepMeSignedIn?: boolean }
 type CreateRoomBody = { name?: string; description?: string; isPrivate?: boolean }
 
 const BASE = import.meta.env.VITE_API_URL

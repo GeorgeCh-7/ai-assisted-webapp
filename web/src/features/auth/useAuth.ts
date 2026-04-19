@@ -12,7 +12,7 @@ export function useMe() {
 
 export function useLogin() {
   return useMutation({
-    mutationFn: (credentials: { email: string; password: string }) =>
+    mutationFn: (credentials: { email: string; password: string; keepMeSignedIn: boolean }) =>
       api.post<UserDto>('/api/auth/login', credentials),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['me'] })
