@@ -177,9 +177,27 @@ Track A owns the running stack. Track B lives on MSW until the integration gate.
 ### Contracts lock
 Both tracks block on `docs/contracts.md` Phase 2 section being committed and agreed. Any drift proposal goes to chat first, never a silent edit.
 
+### MSW derives from Track A's skeleton, not the spec
+
+Track A's first merge is a **skeleton pass**: schema + domain entities + every Phase 2 endpoint and hub method registered with its full request/response/payload types, but the bodies return `Results.StatusCode(501)` (REST) or `Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", … })` (hub). Track B **does not write Phase 2 MSW handlers until this merge lands on `main`**. Track B's mock shapes are then derived from the committed DTO/record types (or from auto-generated TS types if we bolt that on), not from the prose in this spec or contracts.md. This forces contract-code and MSW-mock to share a single source and surfaces type-level drift before business logic is written.
+
+### Track B merge cadence does not have to mirror Track A
+
+Where the frontend surface of a slice is trivial (a button, a color change, a small dialog), Track B batches 2-3 thin slices into one merge rather than shipping a merge-per-slice. Where surface is comparable (moderation modal, friends+DMs, files+composer integration), Track B merges at matching cadence. The explicit batching targets are below in Track B's merge list. Mirror the Track A merge only when the surface justifies it.
+
 ### Track A — Backend (.NET 9 Minimal API)
 
-**Merge 1 checkpoint** (target: ~3 h — schema + private rooms + moderation + message mutations):
+**Merge 1 checkpoint — skeleton pass** (target: ~1.5 h):
+
+- Schema extensions: all new tables + modified Phase 1 tables per contracts.md; one coordinated `docker compose down -v` executed in this merge. `AppDbContext` updated with DbSets, FK cascades, check constraints, indexes.
+- All domain entities under `api/Domain/`: `RoomInvitation`, `RoomBan`, `Friendship`, `UserBan`, `DmThread`, `DmMessage`, `DmUnread`, `FileAttachment`, `PasswordResetToken`. Entities compile; no business logic yet.
+- Every Phase 2 REST endpoint registered with full DTO types and `return Results.StatusCode(501);`. Route groups wired in `Program.cs` so every URL resolves.
+- Every Phase 2 hub method stubbed with the correct argument record and a `Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "..." })` body. Server→client event broadcast sites left empty (no live events yet).
+- `user-{userId}` group auto-join added to `OnConnectedAsync`.
+- No new tests required in this merge beyond "endpoints reachable + return 501" smoke tests (one per route group).
+- → **Merge to `main`. Track B unblocks from here.**
+
+**Merge 2 checkpoint — private rooms + moderation + message mutations** (target: ~3 h after Merge 1):
 
 - All new `Domain/` entities created; `AppDbContext.OnModelCreating` configures:
   - `Friendship` composite PK `(user_a_id, user_b_id)` with check constraint `user_a_id < user_b_id`
@@ -203,7 +221,7 @@ Both tracks block on `docs/contracts.md` Phase 2 section being committed and agr
   - Message delete permission (author OR room admin/owner OK; admin deleting another admin's message OK per brief 2.5.5); soft-delete; hub broadcasts `MessageDeleted`.
 - → **Merge to `main`**
 
-**Merge 2 checkpoint** (target: ~4 h after Merge 1 — friends + DMs + ban + unread):
+**Merge 3 checkpoint — friends + DMs + ban + unread** (target: ~4 h after Merge 2):
 
 - `Friendship` endpoints: send request (by username), list, accept, decline, remove. `FriendshipService` canonicalizes the row tuple.
 - `UserBan` endpoints: ban, unban. On ban: flip `dm_threads.frozen_at` for the thread with the banned user (if any). DM send enforces `user_bans` veto and `friendships.status = 'accepted'`.
@@ -220,7 +238,7 @@ Both tracks block on `docs/contracts.md` Phase 2 section being committed and agr
   - DM unread increments for the other party, resets on `JoinDm`.
 - → **Merge to `main`**
 
-**Merge 3 checkpoint** (target: ~3 h after Merge 2 — files + sessions + password + account + AFK):
+**Merge 4 checkpoint — files + sessions + password + account + AFK** (target: ~3 h after Merge 3):
 
 - `FileStorageService`: writes uploads to `/var/chat-files/{yyyy}/{mm}/{fileId}` (filesystem layout avoids huge flat dirs).
 - `POST /api/files`: multipart upload; validates size (20 MB file, 3 MB image — sniffed by content-type prefix `image/`); writes filesystem; inserts `file_attachments` row with `message_id = NULL`.
@@ -244,45 +262,45 @@ Both tracks block on `docs/contracts.md` Phase 2 section being committed and agr
 
 ### Track B — Frontend
 
-**Merge 1 checkpoint** (target: ~3 h — moderation UI + message mutations + layout):
+Track B does not start Phase 2 work until Track A's Merge 1 (skeleton pass) is on `main`. Track B's MSW handlers and TS types are derived from the committed DTO/record types — not from the prose in this spec. When Track B finds a shape that's under-specified in the committed stubs, it proposes a contracts.md change in chat; does not improvise.
 
+**Merge 1 checkpoint — layout + MSW scaffold + moderation + message mutations** (target: ~3-4 h after Track A Merge 1):
+
+- MSW handlers for **every Phase 2 endpoint** from the skeleton (realistic mock data, not 501 echoes). MSW db extended with friends, DMs, files, invitations, sessions, bans. MSW signalr emitter wired for every new server→client event.
 - Top nav + right sidebar per brief Appendix A (`TopNav.tsx`, `RightSidebar.tsx`).
 - `LoginPage` "Keep me signed in" toggle; `RegisterPage` "Confirm password" field.
 - `RoomSettingsModal` with tabs Members / Admins / Banned / Invitations / Settings. Owner/admin-gated UI sections.
-- Private room creation toggle; invitation send form (by username).
-- `MessageEditMenu`: per-message dropdown with Edit/Delete/Reply (permissions computed client-side from `authorId == me`, `myRole`).
-- `ReplyQuoteBanner` in `MessageComposer`; clicking Reply on a message sets state, composer sends `replyToMessageId`.
-- `MessageList` renders edited/deleted states (italic "edited" after `editedAt`, "Message deleted" placeholder for `deletedAt`, quoted reply block when `replyToMessageId`).
-- `useSignalR` subscribes to `MessageEdited`, `MessageDeleted`, `RoomInvitationReceived`, `RoleChanged`, `RoomBanned`, `RoomDeleted`. Updates React Query caches accordingly; `RoomDeleted` / `RoomBanned` navigates user out.
-- MSW handlers for moderation + invitation + message-mutation endpoints; MSW signalr emitter fires the new events for test flows.
+- Private room creation toggle; invitation send form + accept/decline UI in a top-nav badge.
+- `MessageEditMenu`: per-message dropdown Edit/Delete/Reply with permissions computed client-side from `authorId == me`, `myRole`.
+- `ReplyQuoteBanner` in `MessageComposer`; `MessageList` renders edited / deleted / quoted-reply states.
+- `useSignalR` subscribes to `MessageEdited`, `MessageDeleted`, `RoomInvitationReceived`, `RoleChanged`, `RoomBanned`, `RoomDeleted` with React Query cache updates; `RoomDeleted` / `RoomBanned` navigate user out.
 - → **Merge to `main`**
 
-**Merge 2 checkpoint** (target: ~4 h after Merge 1 — friends + DMs):
+**Merge 2 checkpoint — friends + DMs** (target: ~4 h after Merge 1):
 
-- `FriendsPage`: incoming requests, outgoing requests, friends list with ban/remove actions.
-- `SendFriendRequestDialog` (by username, from friends page) + "Send friend request" action on room member list entries.
-- `DmListSidebar` (slots into right sidebar accordion): list of DM threads with unread badges.
-- `DmWindow` / `DmComposer`: same component structure as `ChatWindow` / `MessageComposer`, different hooks targeting DM endpoints + hub methods.
-- `useDmSignalR`: parallel to room `useSignalR` — subscribes to `DirectMessageReceived` / `Edited` / `Deleted`, `FriendRequest*`, `UserBanned`.
-- Ban-frozen state renders inline banner in `DmWindow` when `dm_threads.frozen_at != null` or `other_party_deleted_at != null`; composer disabled.
-- MSW handlers for friends + DMs; MSW db stores friendship rows canonicalized (frontend must render correctly regardless of ordering invariant).
+- `FriendsPage`: incoming requests, outgoing requests, friends list with ban/remove actions; `SendFriendRequestDialog` + "Send friend request" action from the room member list.
+- `DmListSidebar` (slots into right sidebar accordion) with unread badges.
+- `DmWindow` / `DmComposer` mirror `ChatWindow` / `MessageComposer` against DM endpoints + `dm-{threadId}` hub group.
+- `useDmSignalR` parallel to room `useSignalR`; subscribes to `DirectMessageReceived` / `Edited` / `Deleted`, `FriendRequest*`, `UserBanned`.
+- Ban-frozen state: inline banner in `DmWindow` when `frozenAt != null` or `otherPartyDeletedAt != null`; composer disabled.
+- User-ban UI (Block/Unblock action in friends list + friend-context menu) lands in this merge as a thin add — it's one button bound to one endpoint, batched here rather than standalone.
 - → **Merge to `main`**
 
-**Merge 3 checkpoint** (target: ~3 h after Merge 2 — files + sessions + password + account + AFK):
+**Merge 3 checkpoint (batched thin surfaces) — files + sessions + password + account + AFK** (target: ~3 h after Merge 2):
 
-- `FileUploadButton` (composer) + `FilePasteHandler` (composer-level clipboard listener). Upload hits `POST /api/files`, on success inserts `fileId` into pending-attachment state; send-message includes `attachmentFileIds`.
-- `FileAttachmentView`: images render inline with lazy load, files render as download link with original filename.
-- `SessionsPage`: list of sessions, "This device" marker, Revoke button per row. Revoking current session logs user out.
-- `ChangePasswordPage` (authenticated, under Profile).
-- `ForgotPasswordPage` (unauthenticated): submit email, display token on success (hackathon SMTP-less placeholder). `ResetPasswordPage` takes token from URL + new password.
-- `DeleteAccountDialog`: password reverify + explicit "Delete my account" confirmation; on success clears session and redirects to register.
-- `useAfkTracker`: listens to `mousemove` / `keypress` / `focus` (debounced 15 s) → hub `Heartbeat()`. `PresenceIndicator` updated to render AFK state (yellow dot).
-- MSW handlers for files, sessions, password flows, account deletion; MSW signalr emits `PresenceChanged` with `'afk'`.
+This merge intentionally bundles five thin frontend surfaces. Each one alone is ≤ 200 LOC; shipping them as individual merges would be churn.
+
+- **Files:** `FileUploadButton` (composer), `FilePasteHandler` (clipboard listener), `FileAttachmentView` (inline image + download link with original filename). Send-message flow extended to pass `attachmentFileIds`.
+- **Sessions:** `SessionsPage` — list + "This device" marker + Revoke button. Revoking the current session clears cookie and redirects to login.
+- **Password:** `ChangePasswordPage` (authenticated); `ForgotPasswordPage` + `ResetPasswordPage` (unauth; reset token displayed on-screen).
+- **Account:** `DeleteAccountDialog` — password reverify + explicit confirm; on success clears session and redirects to register.
+- **AFK** (trivially thin — color + hook): `useAfkTracker` debounced heartbeat on `mousemove` / `keypress` / `focus`; `PresenceIndicator` gets a `'afk'` branch (yellow dot).
+- MSW handlers updated to emit `PresenceChanged` with `'afk'`, return files, sessions, password tokens, and account-delete success.
 - → **Merge to `main`**
 
 ### Integration gate
 
-After both tracks reach Merge 3:
+After Track A reaches Merge 4 and Track B reaches Merge 3:
 
 1. Track A: `docker compose down -v && docker compose up --build` (schema churn demands volume nuke).
 2. Track B: `VITE_MSW_ENABLED=false`; `npm run dev`.
@@ -306,6 +324,8 @@ After both tracks reach Merge 3:
 - [ ] **Message edit + delete permission matrix.** Integration test covers: author edits own message OK; non-author edit rejected; room admin edit rejected (admins can delete, not edit — brief 2.5.4 "user can edit their own messages"); author deletes own OK; room admin deletes someone else's OK; room member (non-admin) deletes someone else's rejected; deleting an already-deleted message is idempotent.
 
 - [ ] **Contracts doc is the sole source of truth, Phase 1 section unchanged.** `git diff main..phase-2` on `docs/contracts.md` adds only the Phase 2 section + the one-line CSRF clarification in the Phase 1 section. No Phase 1 endpoint shape is altered.
+
+- [ ] **Track A Merge 1 (skeleton pass) lands before Track B starts Phase 2 MSW work.** Verified by git log: the first commit on Track B's Phase 2 branch that touches `web/src/mocks/handlers.ts` or any `web/src/features/*/types.ts` for a Phase 2 feature has Track A's skeleton commit in its ancestry. Prevents Track B from deriving mock shapes from the spec in isolation — shapes come from committed backend code.
 
 ---
 
