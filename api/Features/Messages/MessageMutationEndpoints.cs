@@ -1,5 +1,6 @@
 using Api.Data;
 using Api.Infrastructure;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Features.Messages;
 
@@ -20,7 +21,7 @@ public static class MessageMutationEndpoints
         return app;
     }
 
-    static Task<IResult> EditMessage(Guid id, EditMessageRequest req, AppDbContext db) =>
+    static Task<IResult> EditMessage(Guid id, [FromBody] EditMessageRequest req, AppDbContext db) =>
         Task.FromResult(Results.StatusCode(501));
 
     static Task<IResult> DeleteMessage(Guid id, AppDbContext db) =>

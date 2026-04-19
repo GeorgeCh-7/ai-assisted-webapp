@@ -1,5 +1,6 @@
 using Api.Data;
 using Api.Infrastructure;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Features.Auth;
 
@@ -15,7 +16,7 @@ public static class AccountDeletionEndpoints
         return app;
     }
 
-    static Task<IResult> DeleteAccount(DeleteAccountRequest req, AppDbContext db) =>
+    static Task<IResult> DeleteAccount([FromBody] DeleteAccountRequest req, AppDbContext db) =>
         Task.FromResult(Results.StatusCode(501));
 }
 
