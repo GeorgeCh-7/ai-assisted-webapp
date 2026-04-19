@@ -1,6 +1,9 @@
 using Api.Data;
 using Api.Domain;
 using Api.Features.Auth;
+using Api.Features.Dms;
+using Api.Features.Files;
+using Api.Features.Friends;
 using Api.Features.Messages;
 using Api.Features.Presence;
 using Api.Features.Rooms;
@@ -77,6 +80,9 @@ builder.Services.AddAntiforgery(opts =>
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<PresenceService>();
 
+// --- MemoryCache (file access checks, Phase 2) ---
+builder.Services.AddMemoryCache();
+
 // --- Swagger ---
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -117,7 +123,16 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok", timestamp = DateTime
 
 app.MapAuthEndpoints();
 app.MapRoomsEndpoints();
+app.MapRoomModerationEndpoints();
+app.MapRoomInvitationEndpoints();
 app.MapMessagesEndpoints();
+app.MapMessageMutationEndpoints();
+app.MapFriendsEndpoints();
+app.MapDmEndpoints();
+app.MapFileEndpoints();
+app.MapSessionsEndpoints();
+app.MapPasswordEndpoints();
+app.MapAccountDeletionEndpoints();
 app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization();
 
 app.Run();
