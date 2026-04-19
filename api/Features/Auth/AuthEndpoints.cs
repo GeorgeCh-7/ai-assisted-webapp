@@ -71,7 +71,12 @@ public static class AuthEndpoints
         };
         var principal = new ClaimsPrincipal(
             new ClaimsIdentity(claims, IdentityConstants.ApplicationScheme));
-        await httpContext.SignInAsync(IdentityConstants.ApplicationScheme, principal);
+        var authProps = new AuthenticationProperties
+        {
+            IsPersistent = req.KeepMeSignedIn,
+            ExpiresUtc = req.KeepMeSignedIn ? DateTimeOffset.UtcNow.AddDays(30) : null,
+        };
+        await httpContext.SignInAsync(IdentityConstants.ApplicationScheme, principal, authProps);
 
         return Results.Ok(new UserResponse(user.Id, user.UserName!, user.Email!));
     }
