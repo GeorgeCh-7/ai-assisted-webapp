@@ -863,3 +863,147 @@ Unchanged payload shape — Phase 2 now emits `'afk'` in addition to `'online'` 
 | `user-{userId}` | `OnConnectedAsync` auto-joins for the connected user | Personal notifications: invitations, friend requests, user-ban, room-ban, room-delete |
 
 `user-{userId}` group is the plumbing for personal notifications that are not room-scoped. Auto-join in `OnConnectedAsync` keeps the hub API symmetric (caller never invokes a `JoinUser`).
+
+---
+
+# API Contracts — Phase 3
+
+> **Status: DRAFT — locks when reviewed.**
+> Additive to Phase 2. Phase 1 / Phase 2 sections above are LOCKED and unchanged.
+
+---
+
+## MSW behavior parity clause (retrospective — applies to all phases)
+
+For every endpoint that returns **conditional response data** — filtering, access control, permission gating, role-gated fields — MSW handlers in `web/src/mocks/handlers.ts` MUST implement the same conditional logic as the real backend. Shape parity alone (matching DTO fields) is insufficient.
+
+Examples:
+- `GET /api/rooms` must filter out private rooms that the caller is not a member or invitee of. Both backend and MSW implement this filter — not just the response envelope shape.
+- `DELETE /api/messages/{id}` permission check (author OR room admin/owner) must evaluate in MSW using the same logic the backend uses — not a blanket "200 OK if the id exists."
+- `GET /api/files/{id}` access control (room member, DM participant, or pre-commit uploader) must hold in MSW — not just stream any placeholder binary.
+
+This clause is recorded here after Phase 2 shipped with several handlers matching DTO shape but not conditional behavior. The resulting bugs (e.g., Bug 1 in `docs/known-bugs.md`) were invisible during MSW-only development and surfaced only against the real backend. The clause is **binding on all future handlers added at any phase**.
+
+---
+
+## Phase 3 SignalR additions
+
+Three new events. One new group. No new REST endpoints.
+
+### Hub group additions
+
+| Group | Joined when | Purpose |
+|-------|-------------|---------|
+| `public-rooms-catalog` | `OnConnectedAsync` auto-joins every connected user | Broadcast new/deleted public rooms to viewers of the catalog |
+
+`user-{userId}` (Phase 2) and `public-rooms-catalog` (Phase 3) are both auto-joined in `OnConnectedAsync`. Clients do not invoke a `Join*` method for either.
+
+### Server → Client
+
+#### RoomCreated
+To: `public-rooms-catalog`.
+Fired from: `POST /api/rooms` on success, **only when `isPrivate == false`**. Private rooms do not broadcast.
+```ts
+{
+  id: string,
+  name: string,
+  description: string,
+  memberCount: number,      // 1 (the creator, joined as owner)
+  isMember: false,           // from the perspective of every recipient in the group
+  isPrivate: false,          // always false for this event
+  myRole: null               // recipients are not members
+}
+```
+**Per-recipient perspective note:** `isMember` / `myRole` are not genuinely per-recipient here — since private rooms are excluded and the creator receives their own event too (but is already rendering the room from the POST response, so UI is idempotent via query-cache dedup), the fixed values `isMember: false, myRole: null` are safe. Frontend handler invalidates `['rooms']` query key; the next catalog refetch returns accurate `isMember` for the creator.
+
+#### RoomDeleted (fanout extended)
+Phase 2 contract unchanged: broadcast to `room-{roomId}` before the DB row is deleted.
+
+**Phase 3 extension:** in addition to `room-{roomId}`, broadcast **also** to `public-rooms-catalog` when the deleted room was public (`isPrivate == false`). Private rooms broadcast only to `room-{roomId}` as before.
+
+Payload unchanged:
+```ts
+{ roomId: string }
+```
+
+Order of operations on `DELETE /api/rooms/{id}`:
+1. Read `isPrivate` on the room (before deletion).
+2. Broadcast to `room-{roomId}` (Phase 2 behavior).
+3. If `isPrivate == false`, also broadcast to `public-rooms-catalog` (Phase 3 addition).
+4. `SaveChangesAsync()` — cascade deletes fire.
+
+Broadcasting before the DB save is deliberate — after save, the group membership is still alive (connections persist), but the row is gone. Either order works for `room-{roomId}` subscribers (client only needs the id); the pattern matches Phase 2 for consistency.
+
+#### DmThreadCreated
+To: `user-{userA}` **and** `user-{userB}`.
+Fired from: `POST /api/dms/open` **only on first-time thread creation** (when the `ON CONFLICT DO NOTHING RETURNING id` pattern actually inserts a new row). If the thread already existed, no broadcast.
+
+Payload (per-recipient: `otherUser` is always the *other* participant from the recipient's perspective):
+```ts
+{
+  id: string,
+  otherUser: { userId: string, username: string, presence: 'online' | 'afk' | 'offline' },
+  lastMessagePreview: null,
+  lastActivityAt: string,     // same as created_at for a just-created thread
+  unreadCount: 0,
+  frozenAt: null,
+  otherPartyDeletedAt: null
+}
+```
+
+Server implementation note: the endpoint must dispatch two separate `Clients.Group(...).SendAsync` calls with per-recipient payloads (shaped for each user's `otherUser` field). Do not broadcast a single shared payload — `otherUser` is not symmetric.
+
+Frontend handler (`useGlobalHubEvents`): invalidate `['dms']` query key. The payload itself could be merged into the cache, but invalidation is simpler and the cost of one extra GET is ~1 KB; prefer invalidation until it measurably matters.
+
+---
+
+## Phase 3 REST additions
+
+None. Phase 3 real-time features reuse existing Phase 1 / Phase 2 REST endpoints (`POST /api/rooms`, `DELETE /api/rooms/{id}`, `POST /api/dms/open`) and only add new broadcast sites in the handlers.
+
+---
+
+## Phase 3 XMPP integration (P2, budget-gated)
+
+XMPP integration in Phase 3 is a **budget-gated P2 stretch** with a pre-committed fallback ladder (see `docs/features/phase-3-spec.md` Slice 7). The contract surface depends on which fallback shipped.
+
+### If fallback (d) or (d-minus) shipped — ejabberd + bridge
+
+**No new public REST endpoints.** The bridge is an internal `BackgroundService` (`api/Features/XmppBridge/XmppBridgeService.cs`) that:
+1. Connects to ejabberd as an XMPP client using configured credentials.
+2. Subscribes to the hardcoded MUC `bridge@conference.chat.local`.
+3. On each received MUC message, writes a row into the `messages` table for the configured bridge room, with `authorUsername` prefixed `xmpp:{nick}` and `authorId = NULL` (or a seeded "XMPP bridge" system user — implementation choice at Slice 7 time).
+4. Invokes `Clients.Group($"room-{bridgeRoomId}").SendAsync("MessageReceived", …)` so connected chat clients see the bridged message live.
+
+**Configuration (docker-compose env vars):**
+- `XMPP__HOST` — ejabberd hostname (container name).
+- `XMPP__USERNAME` / `XMPP__PASSWORD` — bridge client credentials (dedicated ejabberd account).
+- `XMPP__MUC` — full MUC jid.
+- `XMPP__BRIDGE_ROOM_ID` — UUID of the chat room to mirror into.
+
+**Reverse direction (our app → XMPP)** is deferred beyond Phase 3 except as a free-time stretch — see Slice 7 scope in the spec.
+
+### If fallback (c) shipped — ejabberd standalone
+
+ejabberd runs in docker-compose. No bridge code. No Phase 3 contract additions. Our app is unchanged.
+
+### If fallback (b) or (a) shipped
+
+No contract additions. `docs/xmpp-design.md` (if written) describes the intended architecture; treat as documentation, not contract.
+
+---
+
+## Phase 3 error codes
+
+No new hub error codes. Phase 3 does not introduce new hub `Client → Server` methods — only new `Server → Client` events, which do not produce errors.
+
+If Slice 7 ships with the bridge, the bridge's failures are logged (Serilog), not surfaced to chat clients — bridged-in messages just stop appearing. This matches the brief's federation-reliability expectations (federation isn't chat's hard real-time path).
+
+---
+
+## Phase 3 DB schema
+
+No new tables. No new columns. Phase 2's schema is sufficient for Phase 3 real-time features.
+
+If Slice 7 ships with the bridge, the bridged messages reuse the existing `messages` table — see bridge configuration above. No new persistence model.
+

@@ -47,17 +47,24 @@
 
 ---
 
-## Phase 3: Jabber + Polish (Day 2 PM)
+## Phase 3: Real-Time + Demo-Ready + Minimal XMPP (Day 2 PM)
 
-**Goal:** Jabber/XMPP client connectivity and server federation working; application is demo-ready.
+**Goal:** Close the visible Phase 2 real-time gaps, resolve the private-room catalog leak, and ship a polished demo against a written script. Budget permitting, add a minimal Jabber/XMPP presence via an embedded ejabberd server. Re-scoped from the original Phase 3 brief at 15h remaining budget; see `docs/features/phase-3-spec.md` for priority tags and fallback ladder.
 
 ### Deliverables
 
-- Jabber/XMPP integration via a .NET XMPP library: users can connect using a Jabber client
-- Server federation: docker-compose setup with two server instances exchanging messages
-- Admin dashboard: Jabber connection list, federation traffic stats
-- UI polish: visual review against wireframes, edge-case handling, console.log cleanup
-- Demo script: step-by-step walkthrough covering all major features
-- Tests: Jabber connection lifecycle, federation message delivery
+- Shared app-level SignalR hub connection — fixes known-bugs.md Bug 4 (user-scoped events now flow regardless of page).
+- Real-time catalog updates — new `public-rooms-catalog` group; `RoomCreated` broadcast; `RoomDeleted` fanout extended to the catalog.
+- Real-time DM sidebar — `DmThreadCreated` broadcast to both participants on first-time thread creation.
+- Private-room-catalog leak fix (known-bugs.md Bug 1).
+- UI polish pass along the demo path.
+- Written demo script (`docs/demo-script.md`) rehearsed end-to-end in under 6 minutes.
+- **(P2, budget-gated)** Minimal XMPP presence via embedded ejabberd + one-way bridge. Tiered entry gate (≥6h → full bridge; 3–6h → ejabberd standalone; <3h → design doc only) and a (d → c → b → a) mid-slice fallback ladder absorb XMPP's variance.
 
-**Gate:** A Jabber client connects to the server, exchanges a message with a user on a second federated server instance; admin dashboard shows the traffic. Federation load test (brief §6): **50+ clients connected to server A, 50+ to server B; bidirectional messaging A↔B sustained for ≥ 60 s without message loss**, admin dashboard reflects the traffic volume.
+### Explicitly cut from the original Phase 3 brief
+
+- **Server-to-server XMPP federation** (any form). The brief's §6 federation load test (50+/50+, ≥60 s bidirectional) is not in scope.
+- **Admin dashboard.** Cut alongside federation — the dashboard's purpose per the original brief was Jabber connection list + federation traffic stats; without federation, it has no unique content.
+- **Phase 3 automated tests** for the new surface. Existing Phase 1 + Phase 2 test suites continue to run; Phase 3 relies on the demo script as the manual safety net.
+
+**Gate:** See `docs/features/phase-3-spec.md` Scorecard. Demo walks end-to-end across two browser profiles in ≤ 6 minutes without a live surprise, and the existing Phase 1 + Phase 2 test suites continue to pass.
