@@ -38,7 +38,8 @@ public static class RoomsEndpoints
         // Show public rooms + private rooms where caller is a member or has a pending invitation
         var query = db.Rooms.Where(r =>
             !r.IsPrivate ||
-            r.Memberships.Any(m => m.UserId == callerId));
+            r.Memberships.Any(m => m.UserId == callerId) ||
+            db.RoomInvitations.Any(i => i.RoomId == r.Id && i.InviteeUserId == callerId && i.Status == "pending"));
         if (!string.IsNullOrWhiteSpace(q))
             query = query.Where(r => r.Name.Contains(q));
 
@@ -147,6 +148,9 @@ public static class RoomsEndpoints
         if (room is null)
             return Results.NotFound(new { error = "Room not found" });
 
+        if (room.IsPrivate)
+            return Results.Json(new { error = "Room is private — use an invitation to join" }, statusCode: 403);
+
         var already = await db.RoomMemberships
             .AnyAsync(m => m.RoomId == id && m.UserId == callerId);
         if (already)
@@ -161,7 +165,7 @@ public static class RoomsEndpoints
         await db.SaveChangesAsync();
 
         var memberCount = await db.RoomMemberships.CountAsync(m => m.RoomId == id);
-        return Results.Ok(new RoomResponse(id, room.Name, room.Description, memberCount, true, false, "member"));
+        return Results.Ok(new RoomResponse(id, room.Name, room.Description, memberCount, true, room.IsPrivate, "member"));
     }
 
     static async Task<IResult> LeaveRoom(Guid id, ClaimsPrincipal user, AppDbContext db)
