@@ -69,6 +69,7 @@ export function useSendMessage(
         editedAt: null,
         deletedAt: null,
         replyToMessageId: null,
+        attachments: [],
         pending: true,
       }
 

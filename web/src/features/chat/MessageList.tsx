@@ -171,7 +171,7 @@ const MessageRow = ({ msg }: { msg: MessageDto | OptimisticMessage }) => {
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2 leading-none">
           <span className="text-sm font-semibold leading-none">{msg.authorUsername}</span>
-          <PresenceIndicator userId={msg.authorId} className="self-center mb-px" />
+          {msg.authorId && <PresenceIndicator userId={msg.authorId} className="self-center mb-px" />}
           <span className="text-[10px] font-mono text-muted-foreground/70 leading-none">
             {isPending ? 'sending…' : formatTime(msg.sentAt)}
           </span>

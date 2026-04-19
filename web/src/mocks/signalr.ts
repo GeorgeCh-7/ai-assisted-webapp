@@ -85,6 +85,7 @@ function handleSendMessage(arg: InvokeArg): MockMessage | null {
     editedAt: null,
     deletedAt: null,
     replyToMessageId: null,
+    attachments: [],
   }
 
   db.pendingSends.set(idempotencyKey, msg)
