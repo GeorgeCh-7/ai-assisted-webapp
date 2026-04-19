@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Search, Users, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,9 @@ import { useUnreadCount } from '@/hooks/useUnread'
 import type { RoomDto } from './types'
 
 export default function RoomCatalogPage() {
+  const [searchParams] = useSearchParams()
+  const onlyPrivate = searchParams.get('private') === '1'
+
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -20,7 +23,7 @@ export default function RoomCatalogPage() {
   }, [search])
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
-    useRooms(debouncedSearch)
+    useRooms(debouncedSearch, onlyPrivate)
 
   const rooms = data?.pages.flatMap(p => p.items) ?? []
 
@@ -31,7 +34,7 @@ export default function RoomCatalogPage() {
         <div className="mx-auto max-w-2xl px-4 py-3 flex items-center justify-between gap-4">
           <div className="min-w-0">
             <h1 className="font-mono text-sm font-semibold tracking-tight">
-              Public Rooms
+              {onlyPrivate ? 'Private Rooms' : 'Public Rooms'}
             </h1>
             <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
               {isLoading

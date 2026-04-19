@@ -6,7 +6,7 @@ import DmListSidebar from '@/features/dms/DmListSidebar'
 
 export default function RightSidebar() {
   const { roomId: activeRoomId } = useParams<{ roomId?: string }>()
-  const { data } = useRooms('')
+  const { data } = useRooms('', false, true)
 
   const myRooms = (data?.pages.flatMap(p => p.items) ?? []).filter(r => r.isMember)
 

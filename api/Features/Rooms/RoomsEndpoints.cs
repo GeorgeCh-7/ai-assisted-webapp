@@ -30,16 +30,32 @@ public static class RoomsEndpoints
         AppDbContext db,
         [FromQuery] string? q,
         [FromQuery] string? cursor,
+        [FromQuery] bool? @private,
+        [FromQuery] bool? mine,
         [FromQuery] int limit = 20)
     {
         limit = Math.Clamp(limit, 1, 50);
         var callerId = GetUserId(user);
 
-        // Show public rooms + private rooms where caller is a member or has a pending invitation
-        var query = db.Rooms.Where(r =>
-            !r.IsPrivate ||
-            r.Memberships.Any(m => m.UserId == callerId) ||
-            db.RoomInvitations.Any(i => i.RoomId == r.Id && i.InviteeUserId == callerId && i.Status == "pending"));
+        IQueryable<Room> query;
+        if (mine == true)
+        {
+            // Sidebar: all rooms where caller is a member (public + private)
+            query = db.Rooms.Where(r => r.Memberships.Any(m => m.UserId == callerId));
+        }
+        else if (@private == true)
+        {
+            // Private catalog: only rooms the caller belongs to or is invited to
+            query = db.Rooms.Where(r =>
+                r.IsPrivate &&
+                (r.Memberships.Any(m => m.UserId == callerId) ||
+                 db.RoomInvitations.Any(i => i.RoomId == r.Id && i.InviteeUserId == callerId && i.Status == "pending")));
+        }
+        else
+        {
+            // Public catalog: only rooms that are not private
+            query = db.Rooms.Where(r => !r.IsPrivate);
+        }
         if (!string.IsNullOrWhiteSpace(q))
             query = query.Where(r => r.Name.Contains(q));
 

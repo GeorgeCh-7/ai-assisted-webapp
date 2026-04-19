@@ -2,13 +2,15 @@ import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tansta
 import { api } from '@/lib/api'
 import type { RoomDto, PagedRoomsResponse } from './types'
 
-export function useRooms(q = '') {
+export function useRooms(q = '', onlyPrivate = false, mine = false) {
   return useInfiniteQuery({
-    queryKey: ['rooms', q],
+    queryKey: ['rooms', q, onlyPrivate, mine],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ limit: '20' })
       if (q) params.set('q', q)
+      if (mine) params.set('mine', 'true')
+      else if (onlyPrivate) params.set('private', 'true')
       if (pageParam) params.set('cursor', pageParam)
       return api.get<PagedRoomsResponse>(`/api/rooms?${params}`)
     },
