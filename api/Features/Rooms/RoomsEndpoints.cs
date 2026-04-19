@@ -35,7 +35,10 @@ public static class RoomsEndpoints
         limit = Math.Clamp(limit, 1, 50);
         var callerId = GetUserId(user);
 
-        var query = db.Rooms.Where(r => !r.IsPrivate);
+        // Show public rooms + private rooms where caller is a member or has a pending invitation
+        var query = db.Rooms.Where(r =>
+            !r.IsPrivate ||
+            r.Memberships.Any(m => m.UserId == callerId));
         if (!string.IsNullOrWhiteSpace(q))
             query = query.Where(r => r.Name.Contains(q));
 
@@ -100,6 +103,7 @@ public static class RoomsEndpoints
             Name = req.Name,
             Description = req.Description ?? "",
             CreatedById = callerId,
+            IsPrivate = req.IsPrivate,
         };
         db.Rooms.Add(room);
         db.RoomMemberships.Add(new RoomMembership
@@ -111,7 +115,7 @@ public static class RoomsEndpoints
         await db.SaveChangesAsync();
 
         return Results.Created($"/api/rooms/{room.Id}",
-            new RoomResponse(room.Id, room.Name, room.Description, 1, true, false, "owner"));
+            new RoomResponse(room.Id, room.Name, room.Description, 1, true, room.IsPrivate, "owner"));
     }
 
     static async Task<IResult> GetRoom(Guid id, ClaimsPrincipal user, AppDbContext db)
