@@ -189,42 +189,46 @@ type RowProps = {
 const MessageRow = ({ msg, meId, myRole, replyToMsg, onReply, onEditStart, onDelete }: RowProps) => {
   const isPending = 'pending' in msg && msg.pending
   const isDeleted = !!msg.deletedAt
+  const isMe = !!meId && msg.authorId === meId
 
   return (
     <div
-      className={`flex gap-2.5 px-4 py-1 hover:bg-muted/20 transition-colors group ${isPending ? 'opacity-50' : ''}`}
+      className={`flex items-end gap-2 px-4 py-0.5 group ${isPending ? 'opacity-50' : ''} ${isMe ? 'flex-row-reverse' : ''}`}
     >
-      {/* Avatar */}
-      <div
-        className={`mt-0.5 h-7 w-7 shrink-0 rounded text-[11px] font-bold text-white flex items-center justify-center select-none ${
-          isDeleted ? 'bg-muted-foreground/30' : avatarColor(msg.authorUsername)
-        }`}
-      >
-        {msg.authorUsername[0].toUpperCase()}
-      </div>
-
-      {/* Content */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2 leading-none">
-          <span className={`text-sm font-semibold leading-none ${isDeleted ? 'text-muted-foreground' : ''}`}>
-            {msg.authorUsername}
-          </span>
-          {msg.authorId && !isDeleted && (
-            <PresenceIndicator userId={msg.authorId} className="self-center mb-px" />
-          )}
-          <span className="text-[10px] font-mono text-muted-foreground/70 leading-none">
-            {isPending ? 'sending…' : formatTime(msg.sentAt)}
-          </span>
-          {msg.editedAt && !isDeleted && (
-            <span className="text-[10px] font-mono text-muted-foreground/50 leading-none italic">
-              edited
-            </span>
-          )}
+      {/* Avatar — others only */}
+      {!isMe && (
+        <div
+          className={`mb-0.5 h-7 w-7 shrink-0 rounded-full text-[11px] font-bold text-white flex items-center justify-center select-none ${
+            isDeleted ? 'bg-muted-foreground/30' : avatarColor(msg.authorUsername)
+          }`}
+        >
+          {msg.authorUsername[0].toUpperCase()}
         </div>
+      )}
 
-        {/* Reply quote block */}
+      {/* Bubble column */}
+      <div className={`flex flex-col max-w-[72%] ${isMe ? 'items-end' : 'items-start'}`}>
+        {/* Username + meta — others only */}
+        {!isMe && (
+          <div className="flex items-baseline gap-1.5 mb-0.5 px-1">
+            <span className={`text-xs font-semibold ${isDeleted ? 'text-muted-foreground' : ''}`}>
+              {msg.authorUsername}
+            </span>
+            {msg.authorId && !isDeleted && (
+              <PresenceIndicator userId={msg.authorId} className="self-center" />
+            )}
+            <span className="text-[10px] font-mono text-muted-foreground/60">
+              {isPending ? 'sending…' : formatTime(msg.sentAt)}
+            </span>
+            {msg.editedAt && !isDeleted && (
+              <span className="text-[10px] font-mono text-muted-foreground/40 italic">edited</span>
+            )}
+          </div>
+        )}
+
+        {/* Reply quote */}
         {replyToMsg && !isDeleted && (
-          <div className="mt-0.5 mb-1 flex items-start gap-1.5 pl-1 border-l-2 border-muted-foreground/30">
+          <div className={`mb-1 flex items-start gap-1.5 pl-2 border-l-2 border-muted-foreground/30 ${isMe ? 'self-end' : ''}`}>
             <Reply className="h-3 w-3 text-muted-foreground/50 mt-0.5 shrink-0" />
             <div className="min-w-0">
               <span className="text-[11px] font-mono font-semibold text-muted-foreground">
@@ -237,28 +241,42 @@ const MessageRow = ({ msg, meId, myRole, replyToMsg, onReply, onEditStart, onDel
           </div>
         )}
 
-        {/* Message body */}
+        {/* Bubble */}
         {isDeleted ? (
-          <p className="mt-0.5 text-sm text-muted-foreground/50 italic">
+          <p className="text-sm text-muted-foreground/50 italic px-1">
             [Message deleted]
           </p>
         ) : (
-          <>
-            {msg.content && (
-              <p className="mt-0.5 text-sm text-foreground/90 whitespace-pre-wrap break-words leading-relaxed">
-                {msg.content}
-              </p>
-            )}
+          <div
+            className={`px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words ${
+              isMe
+                ? 'bg-emerald-700 text-white rounded-2xl rounded-br-sm'
+                : 'bg-card text-foreground/90 rounded-2xl rounded-bl-sm'
+            }`}
+          >
+            {msg.content}
             {msg.attachments.map(a => (
               <FileAttachmentView key={a.id} attachment={a} />
             ))}
-          </>
+          </div>
+        )}
+
+        {/* Timestamp for own messages */}
+        {isMe && !isDeleted && (
+          <div className="flex items-center gap-1 mt-0.5 px-1">
+            {msg.editedAt && (
+              <span className="text-[10px] font-mono text-muted-foreground/40 italic">edited</span>
+            )}
+            <span className="text-[10px] font-mono text-muted-foreground/60">
+              {isPending ? 'sending…' : formatTime(msg.sentAt)}
+            </span>
+          </div>
         )}
       </div>
 
-      {/* Actions — only for non-pending, non-optimistic messages */}
+      {/* Actions */}
       {!isPending && meId && (
-        <div className="shrink-0 self-start pt-0.5">
+        <div className="shrink-0 self-center opacity-0 group-hover:opacity-100 transition-opacity">
           <MessageEditMenu
             messageId={msg.id}
             authorId={msg.authorId}
