@@ -7,12 +7,13 @@ type Props = {
 
 export default function PresenceIndicator({ userId, className }: Props) {
   const { data: status = 'offline' } = usePresence(userId)
-  const online = status === 'online'
+  const color =
+    status === 'online' ? 'bg-emerald-500' :
+    status === 'afk'    ? 'bg-amber-400' :
+                          'bg-muted-foreground/30'
   return (
     <span
-      className={`inline-block h-2 w-2 rounded-full shrink-0 transition-colors ${
-        online ? 'bg-emerald-500' : 'bg-muted-foreground/30'
-      } ${className ?? ''}`}
+      className={`inline-block h-2 w-2 rounded-full shrink-0 transition-colors ${color} ${className ?? ''}`}
       title={status}
       aria-label={status}
     />

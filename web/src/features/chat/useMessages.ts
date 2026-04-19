@@ -54,7 +54,12 @@ export function useSendMessage(
   pendingRef.current = pending
 
   const send = useCallback(
-    async (content: string, idempotencyKey: string) => {
+    async (
+      content: string,
+      idempotencyKey: string,
+      replyToMessageId: string | null = null,
+      attachmentFileIds: string[] = [],
+    ) => {
       if (!hub || hub.state !== 'Connected' || !me) return
 
       const optimistic: OptimisticMessage = {
@@ -65,17 +70,18 @@ export function useSendMessage(
         content,
         sentAt: new Date().toISOString(),
         idempotencyKey,
-        watermark: 0, // server assigns real watermark; client uses 0 as sentinel
+        watermark: 0,
         editedAt: null,
         deletedAt: null,
-        replyToMessageId: null,
+        replyToMessageId,
+        attachments: [],
         pending: true,
       }
 
       setPending(prev => [...prev, optimistic])
 
       const confirmed = await hub
-        .invoke<MessageDto>('SendMessage', { roomId, content, idempotencyKey })
+        .invoke<MessageDto>('SendMessage', { roomId, content, idempotencyKey, replyToMessageId, attachmentFileIds })
         .catch(() => null)
 
       if (confirmed) {

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { ApiError } from '@/lib/api'
 import { useCreateRoom } from './useRooms'
 
@@ -28,6 +30,7 @@ type Props = {
 
 const CreateRoomModal = ({ open, onOpenChange }: Props) => {
   const navigate = useNavigate()
+  const [isPrivate, setIsPrivate] = useState(false)
   const { mutate: createRoom, isPending, error, reset: resetMutation } = useCreateRoom()
 
   const {
@@ -44,11 +47,12 @@ const CreateRoomModal = ({ open, onOpenChange }: Props) => {
     if (!open) {
       resetForm()
       resetMutation()
+      setIsPrivate(false)
     }
   }, [open, resetForm, resetMutation])
 
   const onSubmit = (values: FormValues) => {
-    createRoom(values, {
+    createRoom({ ...values, isPrivate }, {
       onSuccess: room => {
         onOpenChange(false)
         navigate(`/rooms/${room.id}`)
@@ -97,6 +101,21 @@ const CreateRoomModal = ({ open, onOpenChange }: Props) => {
             {errors.description && (
               <p className="text-xs text-destructive">{errors.description.message}</p>
             )}
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <Checkbox
+              id="is-private"
+              checked={isPrivate}
+              onCheckedChange={checked => setIsPrivate(checked === true)}
+              disabled={isPending}
+            />
+            <Label htmlFor="is-private" className="text-sm font-medium cursor-pointer leading-none">
+              Private room
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                invite-only, not listed in catalog
+              </span>
+            </Label>
           </div>
 
           {serverError && <p className="text-sm text-destructive">{serverError}</p>}

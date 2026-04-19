@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { prependConfirmedMessage } from './useMessages'
@@ -7,9 +8,6 @@ import type { MessageDto, PagedMessagesResponse } from './types'
 import type { PresenceStatus } from '@/features/presence/usePresence'
 import type { RoomDto, PagedRoomsResponse } from '@/features/rooms/types'
 
-// Duck-typed interface satisfied by both the mock hub and the real
-// @microsoft/signalr HubConnection. Keeps this file importable before
-// the npm package is installed.
 export type HubLike = {
   readonly state: string
   start(): Promise<void>
@@ -38,25 +36,19 @@ async function buildConnection(): Promise<HubLike> {
 }
 
 type UseSignalROptions = {
-  // Stable callback; called after gap recovery completes so useSendMessage can
-  // resubmit any in-flight sends that were pending at disconnect.
   onReconnected?: (hub: HubLike) => Promise<void>
 }
 
 export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
   const { onReconnected } = options
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [hub, setHub] = useState<HubLike | null>(null)
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected')
 
-  // Always-current callback ref — the onreconnected closure captures this
-  // so callers can pass a new function each render without re-running the effect.
   const onReconnectedRef = useRef(onReconnected)
   onReconnectedRef.current = onReconnected
 
-  // Highest watermark seen from live MessageReceived events.
-  // Survives reconnects (same effect run). Reset on roomId change / unmount.
-  // A value of 0 means no messages received yet — skip gap recovery in that case.
   const lastSeenWatermarkRef = useRef(0)
 
   useEffect(() => {
@@ -72,10 +64,47 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
         ['messages', roomId],
         old => prependConfirmedMessage(old, msg),
       )
-      // Count as unread when the tab isn't visible (user is away from this room).
       if (document.visibilityState !== 'visible') {
         incrementUnread(qc, roomId)
       }
+    }
+
+    const handleMessageEdited = (payload: unknown) => {
+      const msg = payload as MessageDto
+      qc.setQueryData<InfiniteData<PagedMessagesResponse>>(
+        ['messages', roomId],
+        old => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map(page => ({
+              ...page,
+              items: page.items.map(m =>
+                m.id === msg.id ? { ...m, content: msg.content, editedAt: msg.editedAt } : m,
+              ),
+            })),
+          }
+        },
+      )
+    }
+
+    const handleMessageDeleted = (payload: unknown) => {
+      const { id, deletedAt } = payload as { id: string; roomId: string; deletedAt: string }
+      qc.setQueryData<InfiniteData<PagedMessagesResponse>>(
+        ['messages', roomId],
+        old => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map(page => ({
+              ...page,
+              items: page.items.map(m =>
+                m.id === id ? { ...m, content: '', deletedAt } : m,
+              ),
+            })),
+          }
+        },
+      )
     }
 
     const handlePresence = (payload: unknown) => {
@@ -85,6 +114,59 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
 
     const handleError = (payload: unknown) => {
       console.warn('[ChatHub]', payload)
+    }
+
+    const handleRoleChanged = (payload: unknown) => {
+      const { userId, role } = payload as { userId: string; roomId: string; role: string }
+      qc.setQueryData<InfiniteData<{ items: { userId: string; role: string }[]; nextCursor: string | null }>>(
+        ['room-members', roomId],
+        old => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map(page => ({
+              ...page,
+              items: page.items.map(m => m.userId === userId ? { ...m, role } : m),
+            })),
+          }
+        },
+      )
+    }
+
+    const handleRoomDeleted = (payload: unknown) => {
+      const { roomId: deletedRoomId } = payload as { roomId: string }
+      if (deletedRoomId === roomId) {
+        qc.invalidateQueries({ queryKey: ['rooms'] })
+        navigate('/rooms')
+      }
+    }
+
+    const handleRoomBanned = (_payload: unknown) => {
+      // user-{userId} personal event — we're banned from this room
+      qc.invalidateQueries({ queryKey: ['rooms'] })
+      navigate('/rooms')
+    }
+
+    const handleInvitationReceived = (_payload: unknown) => {
+      qc.invalidateQueries({ queryKey: ['invitations'] })
+    }
+
+    const handleFriendRequestReceived = () => {
+      qc.invalidateQueries({ queryKey: ['friend-requests'] })
+    }
+
+    const handleFriendRequestAccepted = () => {
+      qc.invalidateQueries({ queryKey: ['friend-requests'] })
+      qc.invalidateQueries({ queryKey: ['friends'] })
+    }
+
+    const handleFriendRemoved = () => {
+      qc.invalidateQueries({ queryKey: ['friends'] })
+    }
+
+    const handleUserBanned = () => {
+      qc.invalidateQueries({ queryKey: ['friends'] })
+      qc.invalidateQueries({ queryKey: ['dms'] })
     }
 
     const applyMemberCountDelta = (targetRoomId: string, delta: number) => {
@@ -113,16 +195,15 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
     const handleUserJoined = (payload: unknown) => {
       const { roomId: joinedRoomId } = payload as { userId: string; username: string; roomId: string }
       applyMemberCountDelta(joinedRoomId, +1)
+      qc.invalidateQueries({ queryKey: ['room-members', joinedRoomId] })
     }
 
     const handleUserLeft = (payload: unknown) => {
       const { roomId: leftRoomId } = payload as { userId: string; roomId: string }
       applyMemberCountDelta(leftRoomId, -1)
+      qc.invalidateQueries({ queryKey: ['room-members', leftRoomId] })
     }
 
-    // Fetches messages with watermark > lastSeen and merges into TQ cache.
-    // Only runs when lastSeenWatermark > 0 (had a prior session in this room)
-    // and the server's current watermark is ahead.
     async function doGapRecovery(conn: HubLike): Promise<void> {
       const joinResult = await conn.invoke<{ currentWatermark: number } | null>(
         'JoinRoom',
@@ -158,10 +239,20 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
         connRef = conn
 
         conn.on('MessageReceived', handleMessage)
+        conn.on('MessageEdited', handleMessageEdited)
+        conn.on('MessageDeleted', handleMessageDeleted)
         conn.on('PresenceChanged', handlePresence)
         conn.on('Error', handleError)
         conn.on('UserJoinedRoom', handleUserJoined)
         conn.on('UserLeftRoom', handleUserLeft)
+        conn.on('RoleChanged', handleRoleChanged)
+        conn.on('RoomDeleted', handleRoomDeleted)
+        conn.on('RoomBanned', handleRoomBanned)
+        conn.on('RoomInvitationReceived', handleInvitationReceived)
+        conn.on('FriendRequestReceived', handleFriendRequestReceived)
+        conn.on('FriendRequestAccepted', handleFriendRequestAccepted)
+        conn.on('FriendRemoved', handleFriendRemoved)
+        conn.on('UserBanned', handleUserBanned)
 
         conn.onreconnecting(() => {
           if (!cancelled) setConnectionState('reconnecting')
@@ -187,8 +278,6 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
         await conn.start()
         if (cancelled) { conn.stop(); return }
 
-        // Initial join — gap recovery only fires on onreconnected, not here.
-        // First-time join just subscribes to the room group.
         await conn.invoke<{ currentWatermark: number } | null>('JoinRoom', { roomId })
         if (cancelled) return
 
@@ -207,10 +296,20 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
       const conn = connRef
       if (conn) {
         conn.off('MessageReceived', handleMessage)
+        conn.off('MessageEdited', handleMessageEdited)
+        conn.off('MessageDeleted', handleMessageDeleted)
         conn.off('PresenceChanged', handlePresence)
         conn.off('Error', handleError)
         conn.off('UserJoinedRoom', handleUserJoined)
         conn.off('UserLeftRoom', handleUserLeft)
+        conn.off('RoleChanged', handleRoleChanged)
+        conn.off('RoomDeleted', handleRoomDeleted)
+        conn.off('RoomBanned', handleRoomBanned)
+        conn.off('RoomInvitationReceived', handleInvitationReceived)
+        conn.off('FriendRequestReceived', handleFriendRequestReceived)
+        conn.off('FriendRequestAccepted', handleFriendRequestAccepted)
+        conn.off('FriendRemoved', handleFriendRemoved)
+        conn.off('UserBanned', handleUserBanned)
         conn.invoke('LeaveRoom', { roomId }).catch(() => {})
         conn.stop()
       }
@@ -218,7 +317,7 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
       setConnectionState('disconnected')
       lastSeenWatermarkRef.current = 0
     }
-  }, [roomId, qc])
+  }, [roomId, qc, navigate])
 
   return { hub, connected: connectionState === 'connected', connectionState }
 }
