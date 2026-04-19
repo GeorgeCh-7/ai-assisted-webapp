@@ -202,6 +202,7 @@ public class ChatHub : Hub
     // --- Helpers ---
 
     private static string GroupName(Guid roomId) => $"room-{roomId}";
+    private static string DmGroupName(Guid threadId) => $"dm-{threadId}";
 
     private Guid GetUserId() =>
         Guid.Parse(Context.User!.FindFirst(ClaimTypes.NameIdentifier)!.Value);
@@ -361,44 +362,214 @@ public class ChatHub : Hub
     public async Task<object?> JoinDm(JoinDmArgs args)
     {
         using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+        using (LogContext.PushProperty("UserId", Context.UserIdentifier))
         {
-            await Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "JoinDm not yet implemented" });
-            return null;
+            var userId = GetUserId();
+
+            var thread = await _db.DmThreads.FindAsync(args.ThreadId);
+            if (thread is null)
+            {
+                await Clients.Caller.SendAsync("Error", new { code = "DM_THREAD_NOT_FOUND", message = "Thread not found" });
+                return null;
+            }
+
+            if (thread.UserAId != userId && thread.UserBId != userId)
+            {
+                await Clients.Caller.SendAsync("Error", new { code = "NOT_MEMBER", message = "Not a participant" });
+                return null;
+            }
+
+            await Groups.AddToGroupAsync(Context.ConnectionId, DmGroupName(args.ThreadId));
+
+            await _db.DmUnreads
+                .Where(u => u.UserId == userId && u.DmThreadId == args.ThreadId)
+                .ExecuteUpdateAsync(u => u.SetProperty(p => p.Count, 0));
+
+            return new { currentWatermark = thread.CurrentWatermark };
         }
     }
 
     public async Task LeaveDm(LeaveDmArgs args)
     {
         using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+        using (LogContext.PushProperty("UserId", Context.UserIdentifier))
         {
-            await Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "LeaveDm not yet implemented" });
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, DmGroupName(args.ThreadId));
         }
     }
 
     public async Task<object?> SendDirectMessage(SendDirectMessageArgs args)
     {
         using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+        using (LogContext.PushProperty("UserId", Context.UserIdentifier))
         {
-            await Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "SendDirectMessage not yet implemented" });
-            return null;
+            if (Encoding.UTF8.GetByteCount(args.Content) > 3072)
+            {
+                await Clients.Caller.SendAsync("Error", new { code = "MESSAGE_TOO_LARGE", message = "Message exceeds 3 KB" });
+                return null;
+            }
+
+            var userId = GetUserId();
+
+            var thread = await _db.DmThreads.FindAsync(args.ThreadId);
+            if (thread is null)
+            {
+                await Clients.Caller.SendAsync("Error", new { code = "DM_THREAD_NOT_FOUND", message = "Thread not found" });
+                return null;
+            }
+
+            if (thread.UserAId != userId && thread.UserBId != userId)
+            {
+                await Clients.Caller.SendAsync("Error", new { code = "NOT_MEMBER", message = "Not a participant" });
+                return null;
+            }
+
+            if (thread.FrozenAt.HasValue || thread.OtherPartyDeletedAt.HasValue)
+            {
+                await Clients.Caller.SendAsync("Error", new { code = "THREAD_FROZEN", message = "This conversation is frozen" });
+                return null;
+            }
+
+            var otherUserId = thread.UserAId == userId ? thread.UserBId : thread.UserAId;
+            var (aId, bId) = Api.Features.Friends.FriendshipKey.Canonicalize(userId, otherUserId);
+
+            var isFriend = await _db.Friendships
+                .AnyAsync(f => f.UserAId == aId && f.UserBId == bId && f.Status == "accepted");
+            if (!isFriend)
+            {
+                await Clients.Caller.SendAsync("Error", new { code = "NOT_FRIENDS", message = "You are not friends with this user" });
+                return null;
+            }
+
+            var isBanned = await _db.UserBans
+                .AnyAsync(ub => (ub.BannerUserId == userId && ub.BannedUserId == otherUserId) ||
+                                (ub.BannerUserId == otherUserId && ub.BannedUserId == userId));
+            if (isBanned)
+            {
+                await Clients.Caller.SendAsync("Error", new { code = "USER_BANNED", message = "A user ban exists" });
+                return null;
+            }
+
+            if (args.ReplyToMessageId.HasValue)
+            {
+                var replyExists = await _db.DmMessages.AnyAsync(m =>
+                    m.Id == args.ReplyToMessageId.Value && m.DmThreadId == args.ThreadId);
+                if (!replyExists)
+                {
+                    await Clients.Caller.SendAsync("Error", new { code = "INVALID_REPLY", message = "Reply target not found in this thread" });
+                    return null;
+                }
+            }
+
+            var watermark = await NextDmWatermarkAsync(args.ThreadId);
+
+            var msg = new DmMessage
+            {
+                Id = args.IdempotencyKey,
+                DmThreadId = args.ThreadId,
+                AuthorId = userId,
+                Content = args.Content,
+                SentAt = DateTime.UtcNow,
+                Watermark = watermark,
+                ReplyToMessageId = args.ReplyToMessageId,
+            };
+            _db.DmMessages.Add(msg);
+
+            try
+            {
+                await _db.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex)
+                when (ex.InnerException is Npgsql.PostgresException pg
+                      && pg.SqlState == PostgresErrorCodes.UniqueViolation)
+            {
+                msg = await _db.DmMessages
+                    .AsNoTracking()
+                    .FirstAsync(m => m.Id == args.IdempotencyKey);
+            }
+
+            var author = await _db.Users.FindAsync(userId);
+            var payload = DmMessagePayload(msg, author?.UserName ?? "[deleted user]");
+
+            await Clients.Group(DmGroupName(args.ThreadId)).SendAsync("DirectMessageReceived", payload);
+            await IncrementDmUnreadsAsync(args.ThreadId, userId, msg.Id);
+
+            return payload;
         }
     }
 
     public async Task<object?> EditDirectMessage(EditDirectMessageArgs args)
     {
         using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+        using (LogContext.PushProperty("UserId", Context.UserIdentifier))
         {
-            await Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "EditDirectMessage not yet implemented" });
-            return null;
+            var userId = GetUserId();
+
+            if (Encoding.UTF8.GetByteCount(args.Content) > 3072)
+            {
+                await Clients.Caller.SendAsync("Error", new { code = "MESSAGE_TOO_LARGE", message = "Message exceeds 3 KB" });
+                return null;
+            }
+
+            var msg = await _db.DmMessages.FindAsync(args.MessageId);
+            if (msg is null)
+            {
+                await Clients.Caller.SendAsync("Error", new { code = "MESSAGE_NOT_FOUND", message = "Message not found" });
+                return null;
+            }
+
+            if (msg.AuthorId != userId)
+            {
+                await Clients.Caller.SendAsync("Error", new { code = "NOT_AUTHOR", message = "Only the author can edit this message" });
+                return null;
+            }
+
+            msg.Content = args.Content;
+            msg.EditedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            var author = await _db.Users.FindAsync(userId);
+            var payload = DmMessagePayload(msg, author?.UserName ?? "[deleted user]");
+            await Clients.Group(DmGroupName(msg.DmThreadId)).SendAsync("DirectMessageEdited", payload);
+            return payload;
         }
     }
 
     public async Task<object?> DeleteDirectMessage(DeleteDirectMessageArgs args)
     {
         using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+        using (LogContext.PushProperty("UserId", Context.UserIdentifier))
         {
-            await Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "DeleteDirectMessage not yet implemented" });
-            return null;
+            var userId = GetUserId();
+
+            var msg = await _db.DmMessages.FindAsync(args.MessageId);
+            if (msg is null)
+            {
+                await Clients.Caller.SendAsync("Error", new { code = "MESSAGE_NOT_FOUND", message = "Message not found" });
+                return null;
+            }
+
+            if (msg.AuthorId != userId)
+            {
+                await Clients.Caller.SendAsync("Error", new { code = "NOT_ADMIN", message = "Only the author can delete DM messages" });
+                return null;
+            }
+
+            if (!msg.DeletedAt.HasValue)
+            {
+                msg.DeletedAt = DateTime.UtcNow;
+                msg.Content = "";
+                await _db.SaveChangesAsync();
+            }
+
+            var result = new { id = msg.Id.ToString(), deletedAt = msg.DeletedAt };
+            await Clients.Group(DmGroupName(msg.DmThreadId)).SendAsync("DirectMessageDeleted", new
+            {
+                id = msg.Id.ToString(),
+                dmThreadId = msg.DmThreadId.ToString(),
+                deletedAt = msg.DeletedAt,
+            });
+            return result;
         }
     }
 
@@ -416,6 +587,67 @@ public class ChatHub : Hub
         deletedAt = msg.DeletedAt,
         replyToMessageId = msg.ReplyToMessageId?.ToString(),
     };
+
+    private static object DmMessagePayload(DmMessage msg, string authorUsername) => new
+    {
+        id = msg.Id.ToString(),
+        dmThreadId = msg.DmThreadId.ToString(),
+        authorId = msg.AuthorId?.ToString() ?? "",
+        authorUsername,
+        content = msg.DeletedAt.HasValue ? "" : msg.Content,
+        sentAt = msg.SentAt,
+        idempotencyKey = msg.Id.ToString(),
+        watermark = msg.Watermark,
+        editedAt = msg.EditedAt,
+        deletedAt = msg.DeletedAt,
+        replyToMessageId = msg.ReplyToMessageId?.ToString(),
+    };
+
+    private async Task<long> NextDmWatermarkAsync(Guid threadId)
+    {
+        await _db.Database.OpenConnectionAsync();
+        try
+        {
+            var conn = (NpgsqlConnection)_db.Database.GetDbConnection();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                "UPDATE dm_threads SET current_watermark = current_watermark + 1 WHERE id = $1 RETURNING current_watermark";
+            cmd.Parameters.AddWithValue(threadId);
+            return Convert.ToInt64(await cmd.ExecuteScalarAsync());
+        }
+        finally
+        {
+            await _db.Database.CloseConnectionAsync();
+        }
+    }
+
+    private async Task IncrementDmUnreadsAsync(Guid threadId, Guid senderUserId, Guid messageId)
+    {
+        var thread = await _db.DmThreads.FindAsync(threadId);
+        if (thread is null) return;
+
+        var recipientId = thread.UserAId == senderUserId ? thread.UserBId : thread.UserAId;
+
+        var rows = await _db.DmUnreads
+            .Where(u => u.UserId == recipientId && u.DmThreadId == threadId)
+            .ExecuteUpdateAsync(u => u
+                .SetProperty(p => p.Count, p => p.Count + 1)
+                .SetProperty(p => p.LastReadMessageId, messageId));
+
+        if (rows == 0)
+        {
+            _db.DmUnreads.Add(new DmUnread
+            {
+                UserId = recipientId,
+                DmThreadId = threadId,
+                Count = 1,
+                LastReadMessageId = messageId,
+            });
+        }
+
+        try { await _db.SaveChangesAsync(); }
+        catch { /* best-effort */ }
+    }
 }
 
 // Hub method argument records — Phase 1
