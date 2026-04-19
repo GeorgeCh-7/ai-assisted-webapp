@@ -77,7 +77,12 @@ export function useSendDmMessage(
   pendingRef.current = pending
 
   const send = useCallback(
-    async (content: string, idempotencyKey: string, replyToMessageId: string | null = null) => {
+    async (
+      content: string,
+      idempotencyKey: string,
+      replyToMessageId: string | null = null,
+      attachmentFileIds: string[] = [],
+    ) => {
       if (!hub || hub.state !== 'Connected' || !me) return
 
       const optimistic: OptimisticDmMessage = {
@@ -99,7 +104,7 @@ export function useSendDmMessage(
       setPending(prev => [...prev, optimistic])
 
       const confirmed = await hub
-        .invoke<DmMessageDto>('SendDirectMessage', { threadId, content, idempotencyKey, replyToMessageId })
+        .invoke<DmMessageDto>('SendDirectMessage', { threadId, content, idempotencyKey, replyToMessageId, attachmentFileIds })
         .catch(() => null)
 
       if (confirmed) {

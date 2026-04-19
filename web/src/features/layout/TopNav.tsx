@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Bell, LogOut, User, Lock } from 'lucide-react'
+import { Bell, LogOut, User, Lock, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useMe, useLogout } from '@/features/auth/useAuth'
 import { useInvitations, useAcceptInvitation, useDeclineInvitation } from '@/features/rooms/useRoomInvitations'
+import { useAfkTracker } from '@/features/presence/useAfkTracker'
+import DeleteAccountDialog from '@/features/auth/DeleteAccountDialog'
 
 export default function TopNav() {
   const { data: me } = useMe()
@@ -20,6 +22,9 @@ export default function TopNav() {
   const { mutate: accept } = useAcceptInvitation()
   const { mutate: decline } = useDeclineInvitation()
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+
+  useAfkTracker()
 
   const pendingCount = invitations?.items.length ?? 0
 
@@ -126,6 +131,14 @@ export default function TopNav() {
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="text-destructive focus:text-destructive gap-2"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete account
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive gap-2"
             onClick={handleLogout}
           >
             <LogOut className="h-3.5 w-3.5" />
@@ -133,6 +146,8 @@ export default function TopNav() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <DeleteAccountDialog open={deleteOpen} onOpenChange={setDeleteOpen} />
     </nav>
   )
 }

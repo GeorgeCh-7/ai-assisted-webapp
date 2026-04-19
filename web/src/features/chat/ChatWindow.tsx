@@ -70,8 +70,8 @@ export default function ChatWindow() {
   )
   const displayMessages = [...confirmed, ...pendingFiltered]
 
-  const handleSend = (content: string, idempotencyKey: string) => {
-    send(content, idempotencyKey, replyCtx?.messageId ?? null)
+  const handleSend = (content: string, idempotencyKey: string, attachmentFileIds: string[]) => {
+    send(content, idempotencyKey, replyCtx?.messageId ?? null, attachmentFileIds)
     setReplyCtx(null)
   }
 
@@ -181,6 +181,7 @@ export default function ChatWindow() {
         replyCtx={replyCtx}
         onCancelReply={() => setReplyCtx(null)}
         disabled={!connected}
+        uploadContext={{ scope: 'room', scopeId: roomId }}
       />
 
       {/* Settings modal */}

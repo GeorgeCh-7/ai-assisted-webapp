@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react'
 import { Reply } from 'lucide-react'
 import PresenceIndicator from '@/features/presence/PresenceIndicator'
 import MessageEditMenu from './MessageEditMenu'
+import FileAttachmentView from '@/features/files/FileAttachmentView'
 import type { MessageDto, OptimisticMessage } from './types'
 import type { RoomRole } from '@/features/rooms/types'
 
@@ -242,9 +243,16 @@ const MessageRow = ({ msg, meId, myRole, replyToMsg, onReply, onEditStart, onDel
             [Message deleted]
           </p>
         ) : (
-          <p className="mt-0.5 text-sm text-foreground/90 whitespace-pre-wrap break-words leading-relaxed">
-            {msg.content}
-          </p>
+          <>
+            {msg.content && (
+              <p className="mt-0.5 text-sm text-foreground/90 whitespace-pre-wrap break-words leading-relaxed">
+                {msg.content}
+              </p>
+            )}
+            {msg.attachments.map(a => (
+              <FileAttachmentView key={a.id} attachment={a} />
+            ))}
+          </>
         )}
       </div>
 

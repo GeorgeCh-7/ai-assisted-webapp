@@ -1,21 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { SendHorizonal } from 'lucide-react'
+import { SendHorizonal, Paperclip, X } from 'lucide-react'
 import ReplyQuoteBanner from './ReplyQuoteBanner'
+import { useFileUpload } from '@/features/files/useFileUpload'
 
 const MAX_BYTES = 3072
 
 type ReplyCtx = { messageId: string; username: string; content: string }
 type EditCtx = { messageId: string; content: string }
 
+type UploadContext = { scope: 'room' | 'dm'; scopeId: string }
+
 type Props = {
-  onSend: (content: string, idempotencyKey: string) => void
+  onSend: (content: string, idempotencyKey: string, attachmentFileIds: string[]) => void
   onEditSend?: (content: string) => void
   editCtx?: EditCtx | null
   onCancelEdit?: () => void
   replyCtx?: ReplyCtx | null
   onCancelReply?: () => void
   disabled?: boolean
+  uploadContext?: UploadContext
 }
 
 export default function MessageComposer({
@@ -26,11 +30,15 @@ export default function MessageComposer({
   replyCtx,
   onCancelReply,
   disabled = false,
+  uploadContext,
 }: Props) {
   const [content, setContent] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [pendingFiles, setPendingFiles] = useState<Array<{ id: string; name: string }>>([])
   const idempotencyKeyRef = useRef(crypto.randomUUID())
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { upload, uploading } = useFileUpload(uploadContext ?? { scope: 'room', scopeId: '' })
 
   // When entering edit mode, prefill the composer with the message being edited
   useEffect(() => {
@@ -43,15 +51,25 @@ export default function MessageComposer({
   const byteLength = new TextEncoder().encode(content).length
   const overLimit = byteLength > MAX_BYTES
   const showCounter = byteLength > MAX_BYTES * 0.75
-  const canSend = content.trim().length > 0 && !overLimit && !disabled && !isSending
+  const canSend = (content.trim().length > 0 || pendingFiles.length > 0) && !overLimit && !disabled && !isSending && !uploading
 
   const isEditing = !!editCtx
+
+  const handleFileSelected = async (file: File) => {
+    if (!uploadContext) return
+    const result = await upload(file)
+    if (result) {
+      setPendingFiles(prev => [...prev, { id: result.id, name: result.originalFilename }])
+    }
+  }
 
   const handleSend = () => {
     if (!canSend) return
     const text = content.trim()
+    const fileIds = pendingFiles.map(f => f.id)
 
     setContent('')
+    setPendingFiles([])
     setIsSending(true)
     resetTextareaHeight()
 
@@ -60,7 +78,7 @@ export default function MessageComposer({
     } else {
       const key = idempotencyKeyRef.current
       idempotencyKeyRef.current = crypto.randomUUID()
-      onSend(text, key)
+      onSend(text, key, fileIds)
     }
 
     setIsSending(false)
@@ -114,6 +132,28 @@ export default function MessageComposer({
         </div>
       )}
 
+      {/* Pending file attachments */}
+      {pendingFiles.length > 0 && (
+        <div className="px-3 pt-2 flex flex-wrap gap-1.5">
+          {pendingFiles.map(f => (
+            <span
+              key={f.id}
+              className="inline-flex items-center gap-1 text-[11px] font-mono bg-muted/50 border rounded px-1.5 py-0.5 max-w-[180px]"
+            >
+              <span className="truncate">{f.name}</span>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-destructive shrink-0"
+                onClick={() => setPendingFiles(prev => prev.filter(p => p.id !== f.id))}
+                aria-label="Remove attachment"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="px-3 py-2">
         <div className="flex items-end gap-2">
           <div className="relative flex-1">
@@ -153,6 +193,32 @@ export default function MessageComposer({
               </span>
             )}
           </div>
+
+          {uploadContext && !isEditing && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (file) handleFileSelected(file)
+                  e.target.value = ''
+                }}
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={disabled || uploading}
+                aria-label="Attach file"
+              >
+                <Paperclip className="h-4 w-4" />
+              </Button>
+            </>
+          )}
 
           <Button
             type="button"

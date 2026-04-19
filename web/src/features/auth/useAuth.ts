@@ -35,3 +35,32 @@ export function useLogout() {
     },
   })
 }
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (data: { currentPassword: string; newPassword: string }) =>
+      api.post<Record<string, never>>('/api/auth/change-password', data),
+  })
+}
+
+export function useForgotPassword() {
+  return useMutation({
+    mutationFn: (email: string) =>
+      api.post<{ resetToken: string; expiresAt: string }>('/api/auth/forgot-password', { email }),
+  })
+}
+
+export function useResetPassword() {
+  return useMutation({
+    mutationFn: (data: { token: string; newPassword: string }) =>
+      api.post<Record<string, never>>('/api/auth/reset-password', data),
+  })
+}
+
+export function useDeleteAccount() {
+  return useMutation({
+    mutationFn: (password: string) =>
+      api.delete<Record<string, never>>('/api/auth/me', { password }),
+    onSuccess: () => queryClient.clear(),
+  })
+}

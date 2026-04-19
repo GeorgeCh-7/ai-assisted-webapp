@@ -47,8 +47,8 @@ export default function DmWindow() {
     ...pendingFiltered.map(adaptOptimistic),
   ]
 
-  const handleSend = (content: string, idempotencyKey: string) => {
-    send(content, idempotencyKey, replyCtx?.messageId ?? null)
+  const handleSend = (content: string, idempotencyKey: string, attachmentFileIds: string[]) => {
+    send(content, idempotencyKey, replyCtx?.messageId ?? null, attachmentFileIds)
     setReplyCtx(null)
   }
 
@@ -141,6 +141,7 @@ export default function DmWindow() {
           replyCtx={replyCtx}
           onCancelReply={() => setReplyCtx(null)}
           disabled={!connected}
+          uploadContext={{ scope: 'dm', scopeId: threadId }}
         />
       )}
     </div>
