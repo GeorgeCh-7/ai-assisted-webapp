@@ -35,7 +35,11 @@ public static class RoomsEndpoints
         limit = Math.Clamp(limit, 1, 50);
         var callerId = GetUserId(user);
 
-        var query = db.Rooms.Where(r => !r.IsPrivate);
+        // Show public rooms + private rooms where caller is a member or has a pending invitation
+        var query = db.Rooms.Where(r =>
+            !r.IsPrivate ||
+            r.Memberships.Any(m => m.UserId == callerId) ||
+            db.RoomInvitations.Any(i => i.RoomId == r.Id && i.InviteeUserId == callerId && i.Status == "pending"));
         if (!string.IsNullOrWhiteSpace(q))
             query = query.Where(r => r.Name.Contains(q));
 
@@ -100,6 +104,7 @@ public static class RoomsEndpoints
             Name = req.Name,
             Description = req.Description ?? "",
             CreatedById = callerId,
+            IsPrivate = req.IsPrivate,
         };
         db.Rooms.Add(room);
         db.RoomMemberships.Add(new RoomMembership
@@ -111,7 +116,7 @@ public static class RoomsEndpoints
         await db.SaveChangesAsync();
 
         return Results.Created($"/api/rooms/{room.Id}",
-            new RoomResponse(room.Id, room.Name, room.Description, 1, true, false, "owner"));
+            new RoomResponse(room.Id, room.Name, room.Description, 1, true, room.IsPrivate, "owner"));
     }
 
     static async Task<IResult> GetRoom(Guid id, ClaimsPrincipal user, AppDbContext db)
@@ -143,6 +148,13 @@ public static class RoomsEndpoints
         if (room is null)
             return Results.NotFound(new { error = "Room not found" });
 
+        if (room.IsPrivate)
+            return Results.Json(new { error = "Room is private — use an invitation to join" }, statusCode: 403);
+
+        var isBanned = await db.RoomBans.AnyAsync(b => b.RoomId == id && b.BannedUserId == callerId);
+        if (isBanned)
+            return Results.Json(new { error = "You are banned from this room" }, statusCode: 403);
+
         var already = await db.RoomMemberships
             .AnyAsync(m => m.RoomId == id && m.UserId == callerId);
         if (already)
@@ -157,7 +169,7 @@ public static class RoomsEndpoints
         await db.SaveChangesAsync();
 
         var memberCount = await db.RoomMemberships.CountAsync(m => m.RoomId == id);
-        return Results.Ok(new RoomResponse(id, room.Name, room.Description, memberCount, true, false, "member"));
+        return Results.Ok(new RoomResponse(id, room.Name, room.Description, memberCount, true, room.IsPrivate, "member"));
     }
 
     static async Task<IResult> LeaveRoom(Guid id, ClaimsPrincipal user, AppDbContext db)

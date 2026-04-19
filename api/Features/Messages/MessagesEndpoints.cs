@@ -72,13 +72,15 @@ public static class MessagesEndpoints
                 m.Content,
                 m.SentAt,
                 m.Watermark,
+                m.EditedAt,
+                m.DeletedAt,
+                m.ReplyToMessageId,
             })
             .ToListAsync();
 
         var hasMore = messages.Count > limit;
         var page = messages.Take(limit).ToList();
 
-        // nextCursor is the watermark of the last item (used as the next before/since value)
         string? nextCursor = hasMore ? page.Last().Watermark.ToString() : null;
 
         var items = page.Select(m => new MessageResponse(
@@ -86,11 +88,13 @@ public static class MessagesEndpoints
             m.RoomId,
             m.AuthorId,
             m.AuthorUsername ?? "[deleted user]",
-            m.Content,
+            m.DeletedAt.HasValue ? "" : m.Content,   // suppress content for soft-deleted messages
             m.SentAt,
             m.Id,        // idempotencyKey == id
             m.Watermark,
-            null, null, null));
+            m.EditedAt,
+            m.DeletedAt,
+            m.ReplyToMessageId));
 
         return Results.Ok(new PagedResponse<MessageResponse>(items, nextCursor));
     }

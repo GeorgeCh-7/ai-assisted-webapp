@@ -1,6 +1,6 @@
 namespace Api.Features.Rooms;
 
-public record CreateRoomRequest(string Name, string Description);
+public record CreateRoomRequest(string Name, string Description, bool IsPrivate = false);
 
 public record RoomResponse(
     Guid Id,
