@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Users, Wifi, WifiOff } from 'lucide-react'
+import { ArrowLeft, Settings, Users, Wifi, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useMe } from '@/features/auth/useAuth'
 import { useRoom, useLeaveRoom } from '@/features/rooms/useRooms'
@@ -9,20 +9,25 @@ import { useSignalR, type HubLike } from './useSignalR'
 import { useMessageHistory, useSendMessage } from './useMessages'
 import MessageList from './MessageList'
 import MessageComposer from './MessageComposer'
+import RoomSettingsModal from '@/features/rooms/RoomSettingsModal'
 import { useHeartbeat } from '@/hooks/useHeartbeat'
 import { useMarkRoomRead } from '@/hooks/useUnread'
 import type { PresenceStatus } from '@/features/presence/usePresence'
 import type { MessageDto, OptimisticMessage } from './types'
+import type { RoomRole } from '@/features/rooms/types'
+
+type ReplyCtx = { messageId: string; username: string; content: string }
+type EditCtx = { messageId: string; content: string }
 
 export default function ChatWindow() {
   const { roomId = '' } = useParams<{ roomId: string }>()
   const { data: me } = useMe()
   const { data: room } = useRoom(roomId)
   const { mutate: leaveRoom, isPending: leaving } = useLeaveRoom()
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [replyCtx, setReplyCtx] = useState<ReplyCtx | null>(null)
+  const [editCtx, setEditCtx] = useState<EditCtx | null>(null)
 
-  // Breaks the ordering problem: useSignalR must be called before useSendMessage
-  // (it returns hub), but onReconnected needs resubmit from useSendMessage.
-  // The ref is updated each render so the stable callback always calls the latest resubmit.
   const resubmitRef = useRef<((hub: HubLike) => Promise<void>) | undefined>(undefined)
   const handleReconnected = useCallback(
     (h: HubLike) => resubmitRef.current?.(h) ?? Promise.resolve(),
@@ -44,9 +49,6 @@ export default function ChatWindow() {
 
   useHeartbeat(hub)
 
-  // Seed own presence to 'online' once connected. The server broadcasts
-  // PresenceChanged in OnConnectedAsync — before JoinRoom adds us to the
-  // room group — so we never receive our own event. Set it client-side instead.
   const qc = useQueryClient()
   useEffect(() => {
     if (!connected || !me?.id) return
@@ -54,17 +56,13 @@ export default function ChatWindow() {
   }, [connected, me?.id, qc])
 
   const markRead = useMarkRoomRead(roomId)
-  // Clear unread when the room is opened.
   useEffect(() => { markRead() }, [roomId, markRead])
-  // Also clear when the user returns to this tab after being away.
   useEffect(() => {
     const handle = () => { if (document.visibilityState === 'visible') markRead() }
     document.addEventListener('visibilitychange', handle)
     return () => document.removeEventListener('visibilitychange', handle)
   }, [markRead])
 
-  // Merge TQ cache (pages DESC each) → reversed to ASC, then append optimistic messages.
-  // Dedup: remove any pending message already confirmed in the cache.
   const confirmed: MessageDto[] = data?.pages.flatMap(p => p.items).reverse() ?? []
   const confirmedIds = new Set(confirmed.map(m => m.id))
   const pendingFiltered = pending.filter(
@@ -73,11 +71,25 @@ export default function ChatWindow() {
   const displayMessages = [...confirmed, ...pendingFiltered]
 
   const handleSend = (content: string, idempotencyKey: string) => {
-    send(content, idempotencyKey)
+    send(content, idempotencyKey, replyCtx?.messageId ?? null)
+    setReplyCtx(null)
   }
 
+  const handleEditSend = (content: string) => {
+    if (!editCtx || !hub) return
+    hub.invoke('EditMessage', { messageId: editCtx.messageId, content }).catch(() => {})
+    setEditCtx(null)
+  }
+
+  const handleDelete = (messageId: string) => {
+    if (!hub) return
+    hub.invoke('DeleteMessage', { messageId }).catch(() => {})
+  }
+
+  const myRole = (room?.myRole ?? null) as RoomRole | null
+
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div className="flex flex-col h-full bg-background">
       {/* Header */}
       <div className="flex items-center gap-3 border-b px-4 py-2.5 bg-muted/20 shrink-0">
         <Link
@@ -94,7 +106,6 @@ export default function ChatWindow() {
             <h1 className="font-mono text-sm font-semibold truncate">
               {room?.name ?? roomId}
             </h1>
-            {/* Connection status dot */}
             <span
               className={`h-1.5 w-1.5 rounded-full shrink-0 transition-colors ${connected ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`}
               title={connected ? 'Connected' : 'Connecting…'}
@@ -107,7 +118,7 @@ export default function ChatWindow() {
           )}
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {room && (
             <span className="flex items-center gap-1 text-xs text-muted-foreground font-mono">
               <Users className="h-3 w-3" />
@@ -119,6 +130,18 @@ export default function ChatWindow() {
             <Wifi className="h-3.5 w-3.5 text-emerald-500" />
           ) : (
             <WifiOff className="h-3.5 w-3.5 text-muted-foreground/50 animate-pulse" />
+          )}
+
+          {room?.isMember && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Room settings"
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </Button>
           )}
 
           {room?.myRole !== 'owner' && room?.isMember && (
@@ -142,10 +165,34 @@ export default function ChatWindow() {
         isFetchingNextPage={isFetchingNextPage}
         fetchNextPage={fetchNextPage}
         isLoading={isLoading}
+        meId={me?.id}
+        myRole={myRole}
+        onReply={setReplyCtx}
+        onEditStart={(msgId, content) => setEditCtx({ messageId: msgId, content })}
+        onDelete={handleDelete}
       />
 
       {/* Composer */}
-      <MessageComposer onSend={handleSend} disabled={!connected} />
+      <MessageComposer
+        onSend={handleSend}
+        onEditSend={handleEditSend}
+        editCtx={editCtx}
+        onCancelEdit={() => setEditCtx(null)}
+        replyCtx={replyCtx}
+        onCancelReply={() => setReplyCtx(null)}
+        disabled={!connected}
+      />
+
+      {/* Settings modal */}
+      {room && me && (
+        <RoomSettingsModal
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          room={room}
+          myRole={myRole ?? 'member'}
+          meId={me.id}
+        />
+      )}
     </div>
   )
 }

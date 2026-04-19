@@ -1,6 +1,15 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
+import { Reply } from 'lucide-react'
 import PresenceIndicator from '@/features/presence/PresenceIndicator'
+import MessageEditMenu from './MessageEditMenu'
 import type { MessageDto, OptimisticMessage } from './types'
+import type { RoomRole } from '@/features/rooms/types'
+
+type ReplyContext = {
+  messageId: string
+  username: string
+  content: string
+}
 
 type Props = {
   messages: (MessageDto | OptimisticMessage)[]
@@ -8,10 +17,13 @@ type Props = {
   isFetchingNextPage: boolean
   fetchNextPage: () => void
   isLoading: boolean
+  meId?: string
+  myRole?: RoomRole | null
+  onReply?: (ctx: ReplyContext) => void
+  onEditStart?: (messageId: string, currentContent: string) => void
+  onDelete?: (messageId: string) => void
 }
 
-// Derives a stable Tailwind bg color class from username — same username always
-// gets the same color across renders without any external state
 const AVATAR_COLORS = [
   'bg-rose-500',
   'bg-orange-500',
@@ -47,6 +59,11 @@ export default function MessageList({
   isFetchingNextPage,
   fetchNextPage,
   isLoading,
+  meId,
+  myRole,
+  onReply,
+  onEditStart,
+  onDelete,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -54,14 +71,12 @@ export default function MessageList({
   const prevScrollHeightRef = useRef(0)
   const isInitialLoad = useRef(true)
 
-  // Scroll to bottom on initial data load
   useEffect(() => {
     if (isLoading || messages.length === 0 || !isInitialLoad.current) return
     isInitialLoad.current = false
     bottomRef.current?.scrollIntoView({ behavior: 'instant' })
   }, [isLoading, messages.length])
 
-  // Auto-scroll to bottom when a new message arrives (if the user is near the bottom)
   const prevLastId = useRef<string | null>(null)
   useEffect(() => {
     const last = messages[messages.length - 1]
@@ -74,7 +89,6 @@ export default function MessageList({
     if (nearBottom) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Preserve scroll position when older messages are prepended (layout effect = before paint)
   useLayoutEffect(() => {
     const el = containerRef.current
     if (!el || isFetchingNextPage) return
@@ -85,14 +99,12 @@ export default function MessageList({
     prevScrollHeightRef.current = el.scrollHeight
   })
 
-  // Record scroll height just before fetchNextPage resolves
   const handleFetchMore = () => {
     const el = containerRef.current
     if (el) prevScrollHeightRef.current = el.scrollHeight
     fetchNextPage()
   }
 
-  // Intersection observer on the top sentinel
   useEffect(() => {
     const sentinel = sentinelRef.current
     if (!sentinel) return
@@ -110,13 +122,15 @@ export default function MessageList({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasNextPage, isFetchingNextPage])
 
+  // Build a lookup for reply-to message content (for quote block rendering)
+  const messageIndex = new Map(messages.map(m => [m.id, m]))
+
   return (
     <div
       ref={containerRef}
       className="flex-1 overflow-y-auto min-h-0 flex flex-col"
-      style={{ overflowAnchor: 'none' }} // manual scroll restoration above
+      style={{ overflowAnchor: 'none' }}
     >
-      {/* Top sentinel — triggers load of older messages */}
       <div ref={sentinelRef} className="h-px shrink-0" />
 
       {isFetchingNextPage && (
@@ -140,12 +154,20 @@ export default function MessageList({
       ) : (
         <div className="py-1">
           {messages.map(msg => (
-            <MessageRow key={msg.id} msg={msg} />
+            <MessageRow
+              key={msg.id}
+              msg={msg}
+              meId={meId}
+              myRole={myRole ?? null}
+              replyToMsg={msg.replyToMessageId ? messageIndex.get(msg.replyToMessageId) : undefined}
+              onReply={onReply}
+              onEditStart={onEditStart}
+              onDelete={onDelete}
+            />
           ))}
         </div>
       )}
 
-      {/* Invisible anchor for scroll-to-bottom */}
       <div ref={bottomRef} className="shrink-0" />
     </div>
   )
@@ -153,8 +175,19 @@ export default function MessageList({
 
 // ── Message row ───────────────────────────────────────────────────────────────
 
-const MessageRow = ({ msg }: { msg: MessageDto | OptimisticMessage }) => {
+type RowProps = {
+  msg: MessageDto | OptimisticMessage
+  meId?: string
+  myRole: RoomRole | null
+  replyToMsg?: MessageDto | OptimisticMessage
+  onReply?: (ctx: ReplyContext) => void
+  onEditStart?: (messageId: string, currentContent: string) => void
+  onDelete?: (messageId: string) => void
+}
+
+const MessageRow = ({ msg, meId, myRole, replyToMsg, onReply, onEditStart, onDelete }: RowProps) => {
   const isPending = 'pending' in msg && msg.pending
+  const isDeleted = !!msg.deletedAt
 
   return (
     <div
@@ -162,7 +195,9 @@ const MessageRow = ({ msg }: { msg: MessageDto | OptimisticMessage }) => {
     >
       {/* Avatar */}
       <div
-        className={`mt-0.5 h-7 w-7 shrink-0 rounded text-[11px] font-bold text-white flex items-center justify-center select-none ${avatarColor(msg.authorUsername)}`}
+        className={`mt-0.5 h-7 w-7 shrink-0 rounded text-[11px] font-bold text-white flex items-center justify-center select-none ${
+          isDeleted ? 'bg-muted-foreground/30' : avatarColor(msg.authorUsername)
+        }`}
       >
         {msg.authorUsername[0].toUpperCase()}
       </div>
@@ -170,16 +205,70 @@ const MessageRow = ({ msg }: { msg: MessageDto | OptimisticMessage }) => {
       {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2 leading-none">
-          <span className="text-sm font-semibold leading-none">{msg.authorUsername}</span>
-          {msg.authorId && <PresenceIndicator userId={msg.authorId} className="self-center mb-px" />}
+          <span className={`text-sm font-semibold leading-none ${isDeleted ? 'text-muted-foreground' : ''}`}>
+            {msg.authorUsername}
+          </span>
+          {msg.authorId && !isDeleted && (
+            <PresenceIndicator userId={msg.authorId} className="self-center mb-px" />
+          )}
           <span className="text-[10px] font-mono text-muted-foreground/70 leading-none">
             {isPending ? 'sending…' : formatTime(msg.sentAt)}
           </span>
+          {msg.editedAt && !isDeleted && (
+            <span className="text-[10px] font-mono text-muted-foreground/50 leading-none italic">
+              edited
+            </span>
+          )}
         </div>
-        <p className="mt-0.5 text-sm text-foreground/90 whitespace-pre-wrap break-words leading-relaxed">
-          {msg.content}
-        </p>
+
+        {/* Reply quote block */}
+        {replyToMsg && !isDeleted && (
+          <div className="mt-0.5 mb-1 flex items-start gap-1.5 pl-1 border-l-2 border-muted-foreground/30">
+            <Reply className="h-3 w-3 text-muted-foreground/50 mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <span className="text-[11px] font-mono font-semibold text-muted-foreground">
+                {replyToMsg.authorUsername}
+              </span>
+              <p className="text-[11px] font-mono text-muted-foreground truncate">
+                {replyToMsg.deletedAt ? '[deleted]' : replyToMsg.content}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Message body */}
+        {isDeleted ? (
+          <p className="mt-0.5 text-sm text-muted-foreground/50 italic">
+            [Message deleted]
+          </p>
+        ) : (
+          <p className="mt-0.5 text-sm text-foreground/90 whitespace-pre-wrap break-words leading-relaxed">
+            {msg.content}
+          </p>
+        )}
       </div>
+
+      {/* Actions — only for non-pending, non-optimistic messages */}
+      {!isPending && meId && (
+        <div className="shrink-0 self-start pt-0.5">
+          <MessageEditMenu
+            messageId={msg.id}
+            authorId={msg.authorId}
+            meId={meId}
+            myRole={myRole}
+            deletedAt={msg.deletedAt}
+            onReply={() =>
+              onReply?.({
+                messageId: msg.id,
+                username: msg.authorUsername,
+                content: msg.content,
+              })
+            }
+            onEdit={() => onEditStart?.(msg.id, msg.content)}
+            onDelete={() => onDelete?.(msg.id)}
+          />
+        </div>
+      )}
     </div>
   )
 }
