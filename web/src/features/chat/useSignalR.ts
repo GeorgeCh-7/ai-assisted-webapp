@@ -1,38 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { prependConfirmedMessage } from './useMessages'
 import { incrementUnread } from '@/hooks/useUnread'
+import { useHubContext } from './HubProvider'
+import type { HubLike } from '@/lib/hub'
 import type { MessageDto, PagedMessagesResponse } from './types'
-import type { PresenceStatus } from '@/features/presence/usePresence'
 
-export type HubLike = {
-  readonly state: string
-  start(): Promise<void>
-  stop(): Promise<void>
-  on(event: string, cb: (...args: unknown[]) => void): void
-  off(event: string, cb?: (...args: unknown[]) => void): void
-  invoke<T>(method: string, arg?: Record<string, unknown>): Promise<T>
-  onreconnecting(cb: (error?: Error) => void): void
-  onreconnected(cb: (connectionId?: string) => void): void
-  onclose(cb: (error?: Error) => void): void
-}
-
-export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
-
-async function buildConnection(): Promise<HubLike> {
-  if (import.meta.env.VITE_MSW_ENABLED === 'true') {
-    const { createMockHubConnection } = await import('@/mocks/signalr')
-    return createMockHubConnection() as unknown as HubLike
-  }
-  const apiUrl = import.meta.env.VITE_API_URL ?? ''
-  const { HubConnectionBuilder } = await import('@microsoft/signalr')
-  return new HubConnectionBuilder()
-    .withUrl(`${apiUrl}/hubs/chat`, { withCredentials: true })
-    .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-    .build() as unknown as HubLike
-}
+export type { HubLike, ConnectionState } from '@/lib/hub'
 
 type UseSignalROptions = {
   onReconnected?: (hub: HubLike) => Promise<void>
@@ -40,21 +16,58 @@ type UseSignalROptions = {
 
 export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
   const { onReconnected } = options
+  const { hub, connectionState, subscribeReconnect } = useHubContext()
   const qc = useQueryClient()
   const navigate = useNavigate()
-  const [hub, setHub] = useState<HubLike | null>(null)
-  const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected')
 
   const onReconnectedRef = useRef(onReconnected)
   onReconnectedRef.current = onReconnected
 
   const lastSeenWatermarkRef = useRef(0)
 
-  useEffect(() => {
-    if (!roomId) return
+  async function doGapRecovery(conn: HubLike): Promise<void> {
+    const joinResult = await conn.invoke<{ currentWatermark: number } | null>(
+      'JoinRoom',
+      { roomId },
+    )
+    if (!joinResult) return
 
-    let cancelled = false
-    let connRef: HubLike | null = null
+    const since = lastSeenWatermarkRef.current
+    if (since === 0 || joinResult.currentWatermark <= since) return
+
+    let cursor = since
+    for (;;) {
+      const page = await api.get<PagedMessagesResponse>(
+        `/api/rooms/${roomId}/messages?since=${cursor}&limit=50`,
+      )
+      for (const msg of page.items) {
+        lastSeenWatermarkRef.current = Math.max(lastSeenWatermarkRef.current, msg.watermark)
+        qc.setQueryData<InfiniteData<PagedMessagesResponse>>(
+          ['messages', roomId],
+          old => prependConfirmedMessage(old, msg),
+        )
+      }
+      if (!page.nextCursor || page.items.length === 0) break
+      cursor = parseInt(page.nextCursor)
+    }
+  }
+
+  // Register reconnect handler — re-joins room group and recovers gaps on hub reconnect
+  useEffect(() => {
+    if (!hub || !roomId) return
+
+    const handleReconnect = async () => {
+      await doGapRecovery(hub)
+      await onReconnectedRef.current?.(hub)
+    }
+
+    return subscribeReconnect(handleReconnect)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hub, roomId, subscribeReconnect])
+
+  // Room-scoped event handlers + JoinRoom/LeaveRoom lifecycle
+  useEffect(() => {
+    if (!hub || !roomId) return
 
     const handleMessage = (payload: unknown) => {
       const msg = payload as MessageDto
@@ -106,11 +119,6 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
       )
     }
 
-    const handlePresence = (payload: unknown) => {
-      const { userId, status } = payload as { userId: string; status: PresenceStatus }
-      qc.setQueryData<PresenceStatus>(['presence', userId], status)
-    }
-
     const handleError = (payload: unknown) => {
       console.warn('[ChatHub]', payload)
     }
@@ -140,163 +148,42 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
       }
     }
 
-    const handleRoomBanned = (_payload: unknown) => {
-      // user-{userId} personal event — we're banned from this room
-      qc.invalidateQueries({ queryKey: ['rooms'] })
-      navigate('/rooms')
-    }
-
-    const handleInvitationReceived = (_payload: unknown) => {
-      qc.invalidateQueries({ queryKey: ['invitations'] })
-    }
-
-    const handleFriendRequestReceived = () => {
-      qc.invalidateQueries({ queryKey: ['friend-requests'] })
-    }
-
-    const handleFriendRequestAccepted = () => {
-      qc.invalidateQueries({ queryKey: ['friend-requests'] })
-      qc.invalidateQueries({ queryKey: ['friends'] })
-    }
-
-    const handleFriendRequestDeclined = () => {
-      qc.invalidateQueries({ queryKey: ['friend-requests'] })
-    }
-
-    const handleFriendRemoved = () => {
-      qc.invalidateQueries({ queryKey: ['friends'] })
-    }
-
-    const handleUserBanned = () => {
-      qc.invalidateQueries({ queryKey: ['friends'] })
-      qc.invalidateQueries({ queryKey: ['dms'] })
-    }
-
     const handleUserJoined = (_payload: unknown) => {
-      // UserJoinedRoom fires when someone opens the room window (SignalR group join),
-      // not when they become a member — don't touch memberCount here.
+      // UserJoinedRoom fires on SignalR group join (window open), not membership change.
     }
 
     const handleUserLeft = (_payload: unknown) => {
-      // Same as above — window close, not membership change.
+      // Same — window close, not membership change.
     }
 
-    async function doGapRecovery(conn: HubLike): Promise<void> {
-      const joinResult = await conn.invoke<{ currentWatermark: number } | null>(
-        'JoinRoom',
-        { roomId },
-      )
-      if (!joinResult) return
+    hub.on('MessageReceived', handleMessage)
+    hub.on('MessageEdited', handleMessageEdited)
+    hub.on('MessageDeleted', handleMessageDeleted)
+    hub.on('Error', handleError)
+    hub.on('UserJoinedRoom', handleUserJoined)
+    hub.on('UserLeftRoom', handleUserLeft)
+    hub.on('RoleChanged', handleRoleChanged)
+    hub.on('RoomDeleted', handleRoomDeleted)
 
-      const since = lastSeenWatermarkRef.current
-      if (since === 0 || joinResult.currentWatermark <= since) return
-
-      let cursor = since
-      for (;;) {
-        const page = await api.get<PagedMessagesResponse>(
-          `/api/rooms/${roomId}/messages?since=${cursor}&limit=50`,
-        )
-        for (const msg of page.items) {
-          lastSeenWatermarkRef.current = Math.max(lastSeenWatermarkRef.current, msg.watermark)
-          qc.setQueryData<InfiniteData<PagedMessagesResponse>>(
-            ['messages', roomId],
-            old => prependConfirmedMessage(old, msg),
-          )
-        }
-        if (!page.nextCursor || page.items.length === 0) break
-        cursor = parseInt(page.nextCursor)
-      }
-    }
-
-    setConnectionState('connecting')
-
-    buildConnection()
-      .then(async conn => {
-        if (cancelled) { conn.stop(); return }
-        connRef = conn
-
-        conn.on('MessageReceived', handleMessage)
-        conn.on('MessageEdited', handleMessageEdited)
-        conn.on('MessageDeleted', handleMessageDeleted)
-        conn.on('PresenceChanged', handlePresence)
-        conn.on('Error', handleError)
-        conn.on('UserJoinedRoom', handleUserJoined)
-        conn.on('UserLeftRoom', handleUserLeft)
-        conn.on('RoleChanged', handleRoleChanged)
-        conn.on('RoomDeleted', handleRoomDeleted)
-        conn.on('RoomBanned', handleRoomBanned)
-        conn.on('RoomInvitationReceived', handleInvitationReceived)
-        conn.on('FriendRequestReceived', handleFriendRequestReceived)
-        conn.on('FriendRequestAccepted', handleFriendRequestAccepted)
-        conn.on('FriendRequestDeclined', handleFriendRequestDeclined)
-        conn.on('FriendRemoved', handleFriendRemoved)
-        conn.on('UserBanned', handleUserBanned)
-
-        conn.onreconnecting(() => {
-          if (!cancelled) setConnectionState('reconnecting')
-        })
-
-        conn.onreconnected(async () => {
-          if (cancelled) return
-          try {
-            await doGapRecovery(conn)
-            await onReconnectedRef.current?.(conn)
-          } finally {
-            if (!cancelled) setConnectionState('connected')
-          }
-        })
-
-        conn.onclose(() => {
-          if (!cancelled) {
-            setHub(null)
-            setConnectionState('disconnected')
-          }
-        })
-
-        await conn.start()
-        if (cancelled) { conn.stop(); return }
-
-        await conn.invoke<{ currentWatermark: number } | null>('JoinRoom', { roomId })
-        if (cancelled) return
-
-        setHub(conn)
-        setConnectionState('connected')
+    hub.invoke<{ currentWatermark: number } | null>('JoinRoom', { roomId })
+      .then(result => {
+        if (result) lastSeenWatermarkRef.current = Math.max(lastSeenWatermarkRef.current, 0)
       })
-      .catch(err => {
-        if (!cancelled) {
-          console.error('[useSignalR]', err)
-          setConnectionState('disconnected')
-        }
-      })
+      .catch(() => {})
 
     return () => {
-      cancelled = true
-      const conn = connRef
-      if (conn) {
-        conn.off('MessageReceived', handleMessage)
-        conn.off('MessageEdited', handleMessageEdited)
-        conn.off('MessageDeleted', handleMessageDeleted)
-        conn.off('PresenceChanged', handlePresence)
-        conn.off('Error', handleError)
-        conn.off('UserJoinedRoom', handleUserJoined)
-        conn.off('UserLeftRoom', handleUserLeft)
-        conn.off('RoleChanged', handleRoleChanged)
-        conn.off('RoomDeleted', handleRoomDeleted)
-        conn.off('RoomBanned', handleRoomBanned)
-        conn.off('RoomInvitationReceived', handleInvitationReceived)
-        conn.off('FriendRequestReceived', handleFriendRequestReceived)
-        conn.off('FriendRequestAccepted', handleFriendRequestAccepted)
-        conn.off('FriendRequestDeclined', handleFriendRequestDeclined)
-        conn.off('FriendRemoved', handleFriendRemoved)
-        conn.off('UserBanned', handleUserBanned)
-        conn.invoke('LeaveRoom', { roomId }).catch(() => {})
-        conn.stop()
-      }
-      setHub(null)
-      setConnectionState('disconnected')
+      hub.off('MessageReceived', handleMessage)
+      hub.off('MessageEdited', handleMessageEdited)
+      hub.off('MessageDeleted', handleMessageDeleted)
+      hub.off('Error', handleError)
+      hub.off('UserJoinedRoom', handleUserJoined)
+      hub.off('UserLeftRoom', handleUserLeft)
+      hub.off('RoleChanged', handleRoleChanged)
+      hub.off('RoomDeleted', handleRoomDeleted)
+      hub.invoke('LeaveRoom', { roomId }).catch(() => {})
       lastSeenWatermarkRef.current = 0
     }
-  }, [roomId, qc, navigate])
+  }, [hub, roomId, qc, navigate])
 
   return { hub, connected: connectionState === 'connected', connectionState }
 }

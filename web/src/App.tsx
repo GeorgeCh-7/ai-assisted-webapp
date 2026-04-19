@@ -12,6 +12,23 @@ import SessionsPage from './features/sessions/SessionsPage'
 import ChangePasswordPage from './features/auth/ChangePasswordPage'
 import TopNav from './features/layout/TopNav'
 import RightSidebar from './features/layout/RightSidebar'
+import { HubProvider } from './features/chat/HubProvider'
+import { useGlobalHubEvents } from './features/chat/useGlobalHubEvents'
+
+function ProtectedLayout() {
+  useGlobalHubEvents()
+  return (
+    <div className="flex flex-col h-screen bg-background overflow-hidden">
+      <TopNav />
+      <div className="flex flex-1 min-h-0">
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <Outlet />
+        </div>
+        <RightSidebar />
+      </div>
+    </div>
+  )
+}
 
 function ProtectedRoute() {
   const { data: user, isPending, error } = useMe()
@@ -27,15 +44,9 @@ function ProtectedRoute() {
   if (error || !user) return <Navigate to="/login" replace />
 
   return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
-      <TopNav />
-      <div className="flex flex-1 min-h-0">
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <Outlet />
-        </div>
-        <RightSidebar />
-      </div>
-    </div>
+    <HubProvider>
+      <ProtectedLayout />
+    </HubProvider>
   )
 }
 

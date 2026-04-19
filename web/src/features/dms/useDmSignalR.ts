@@ -1,33 +1,26 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { prependConfirmedDmMessage } from './useDms'
+import { useHubContext } from '@/features/chat/HubProvider'
 import type { DmMessageDto, PagedDmMessagesResponse } from './types'
-import type { HubLike } from '@/features/chat/useSignalR'
-
-async function buildConnection(): Promise<HubLike> {
-  if (import.meta.env.VITE_MSW_ENABLED === 'true') {
-    const { createMockHubConnection } = await import('@/mocks/signalr')
-    return createMockHubConnection() as unknown as HubLike
-  }
-  const apiUrl = import.meta.env.VITE_API_URL ?? ''
-  const { HubConnectionBuilder } = await import('@microsoft/signalr')
-  return new HubConnectionBuilder()
-    .withUrl(`${apiUrl}/hubs/chat`, { withCredentials: true })
-    .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-    .build() as unknown as HubLike
-}
 
 export function useDmSignalR(threadId: string) {
+  const { hub, connectionState, subscribeReconnect } = useHubContext()
   const qc = useQueryClient()
-  const [hub, setHub] = useState<HubLike | null>(null)
-  const [connected, setConnected] = useState(false)
   const lastSeenWatermarkRef = useRef(0)
 
+  // Re-join DM group on hub reconnect
   useEffect(() => {
-    if (!threadId) return
+    if (!hub || !threadId) return
+    const handleReconnect = async () => {
+      await hub.invoke('JoinDm', { threadId })
+    }
+    return subscribeReconnect(handleReconnect)
+  }, [hub, threadId, subscribeReconnect])
 
-    let cancelled = false
-    let connRef: HubLike | null = null
+  // DM-scoped event handlers + JoinDm/LeaveDm lifecycle
+  useEffect(() => {
+    if (!hub || !threadId) return
 
     const handleDirectMessage = (payload: unknown) => {
       const msg = payload as DmMessageDto
@@ -78,27 +71,8 @@ export function useDmSignalR(threadId: string) {
       )
     }
 
-    const handleFriendRequestReceived = () => {
-      qc.invalidateQueries({ queryKey: ['friend-requests'] })
-    }
-
-    const handleFriendRequestAccepted = () => {
-      qc.invalidateQueries({ queryKey: ['friend-requests'] })
-      qc.invalidateQueries({ queryKey: ['friends'] })
-    }
-
-    const handleFriendRequestDeclined = () => {
-      qc.invalidateQueries({ queryKey: ['friend-requests'] })
-    }
-
-    const handleFriendRemoved = () => {
-      qc.invalidateQueries({ queryKey: ['friends'] })
-      qc.invalidateQueries({ queryKey: ['dms'] })
-    }
-
+    // Only the DM-thread-specific part of UserBanned — global queries handled by useGlobalHubEvents
     const handleUserBanned = () => {
-      qc.invalidateQueries({ queryKey: ['friends'] })
-      qc.invalidateQueries({ queryKey: ['dms'] })
       qc.invalidateQueries({ queryKey: ['dm', threadId] })
     }
 
@@ -106,64 +80,24 @@ export function useDmSignalR(threadId: string) {
       console.warn('[DmHub]', payload)
     }
 
-    buildConnection()
-      .then(async conn => {
-        if (cancelled) { conn.stop(); return }
-        connRef = conn
+    hub.on('DirectMessageReceived', handleDirectMessage)
+    hub.on('DirectMessageEdited', handleDirectMessageEdited)
+    hub.on('DirectMessageDeleted', handleDirectMessageDeleted)
+    hub.on('UserBanned', handleUserBanned)
+    hub.on('Error', handleError)
 
-        conn.on('DirectMessageReceived', handleDirectMessage)
-        conn.on('DirectMessageEdited', handleDirectMessageEdited)
-        conn.on('DirectMessageDeleted', handleDirectMessageDeleted)
-        conn.on('FriendRequestReceived', handleFriendRequestReceived)
-        conn.on('FriendRequestAccepted', handleFriendRequestAccepted)
-        conn.on('FriendRequestDeclined', handleFriendRequestDeclined)
-        conn.on('FriendRemoved', handleFriendRemoved)
-        conn.on('UserBanned', handleUserBanned)
-        conn.on('Error', handleError)
-
-        conn.onclose(() => {
-          if (!cancelled) {
-            setHub(null)
-            setConnected(false)
-          }
-        })
-
-        await conn.start()
-        if (cancelled) { conn.stop(); return }
-
-        await conn.invoke('JoinDm', { threadId })
-        if (cancelled) return
-
-        setHub(conn)
-        setConnected(true)
-      })
-      .catch(err => {
-        if (!cancelled) {
-          console.error('[useDmSignalR]', err)
-        }
-      })
+    hub.invoke('JoinDm', { threadId }).catch(() => {})
 
     return () => {
-      cancelled = true
-      const conn = connRef
-      if (conn) {
-        conn.off('DirectMessageReceived', handleDirectMessage)
-        conn.off('DirectMessageEdited', handleDirectMessageEdited)
-        conn.off('DirectMessageDeleted', handleDirectMessageDeleted)
-        conn.off('FriendRequestReceived', handleFriendRequestReceived)
-        conn.off('FriendRequestAccepted', handleFriendRequestAccepted)
-        conn.off('FriendRequestDeclined', handleFriendRequestDeclined)
-        conn.off('FriendRemoved', handleFriendRemoved)
-        conn.off('UserBanned', handleUserBanned)
-        conn.off('Error', handleError)
-        conn.invoke('LeaveDm', { threadId }).catch(() => {})
-        conn.stop()
-      }
-      setHub(null)
-      setConnected(false)
+      hub.off('DirectMessageReceived', handleDirectMessage)
+      hub.off('DirectMessageEdited', handleDirectMessageEdited)
+      hub.off('DirectMessageDeleted', handleDirectMessageDeleted)
+      hub.off('UserBanned', handleUserBanned)
+      hub.off('Error', handleError)
+      hub.invoke('LeaveDm', { threadId }).catch(() => {})
       lastSeenWatermarkRef.current = 0
     }
-  }, [threadId, qc])
+  }, [hub, threadId, qc])
 
-  return { hub, connected }
+  return { hub, connected: connectionState === 'connected' }
 }
