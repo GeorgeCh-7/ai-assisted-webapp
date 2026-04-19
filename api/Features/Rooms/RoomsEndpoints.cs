@@ -151,6 +151,10 @@ public static class RoomsEndpoints
         if (room.IsPrivate)
             return Results.Json(new { error = "Room is private — use an invitation to join" }, statusCode: 403);
 
+        var isBanned = await db.RoomBans.AnyAsync(b => b.RoomId == id && b.BannedUserId == callerId);
+        if (isBanned)
+            return Results.Json(new { error = "You are banned from this room" }, statusCode: 403);
+
         var already = await db.RoomMemberships
             .AnyAsync(m => m.RoomId == id && m.UserId == callerId);
         if (already)

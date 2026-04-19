@@ -83,6 +83,13 @@ builder.Services.AddSingleton<PresenceService>();
 // --- MemoryCache (file access checks, Phase 2) ---
 builder.Services.AddMemoryCache();
 
+// --- File storage ---
+builder.Services.AddSingleton<FileStorageService>();
+
+// --- Background services ---
+builder.Services.AddHostedService<AfkSweeper>();
+builder.Services.AddHostedService<OrphanFileSweeper>();
+
 // --- Swagger ---
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
