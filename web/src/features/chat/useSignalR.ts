@@ -6,7 +6,6 @@ import { prependConfirmedMessage } from './useMessages'
 import { incrementUnread } from '@/hooks/useUnread'
 import type { MessageDto, PagedMessagesResponse } from './types'
 import type { PresenceStatus } from '@/features/presence/usePresence'
-import type { RoomDto, PagedRoomsResponse } from '@/features/rooms/types'
 
 export type HubLike = {
   readonly state: string
@@ -169,39 +168,13 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
       qc.invalidateQueries({ queryKey: ['dms'] })
     }
 
-    const applyMemberCountDelta = (targetRoomId: string, delta: number) => {
-      qc.setQueriesData<InfiniteData<PagedRoomsResponse>>(
-        { queryKey: ['rooms'] },
-        old => {
-          if (!old) return old
-          return {
-            ...old,
-            pages: old.pages.map(page => ({
-              ...page,
-              items: page.items.map(r =>
-                r.id === targetRoomId
-                  ? { ...r, memberCount: Math.max(0, r.memberCount + delta) }
-                  : r,
-              ),
-            })),
-          }
-        },
-      )
-      qc.setQueryData<RoomDto>(['room', targetRoomId], old =>
-        old ? { ...old, memberCount: Math.max(0, old.memberCount + delta) } : old,
-      )
+    const handleUserJoined = (_payload: unknown) => {
+      // UserJoinedRoom fires when someone opens the room window (SignalR group join),
+      // not when they become a member — don't touch memberCount here.
     }
 
-    const handleUserJoined = (payload: unknown) => {
-      const { roomId: joinedRoomId } = payload as { userId: string; username: string; roomId: string }
-      applyMemberCountDelta(joinedRoomId, +1)
-      qc.invalidateQueries({ queryKey: ['room-members', joinedRoomId] })
-    }
-
-    const handleUserLeft = (payload: unknown) => {
-      const { roomId: leftRoomId } = payload as { userId: string; roomId: string }
-      applyMemberCountDelta(leftRoomId, -1)
-      qc.invalidateQueries({ queryKey: ['room-members', leftRoomId] })
+    const handleUserLeft = (_payload: unknown) => {
+      // Same as above — window close, not membership change.
     }
 
     async function doGapRecovery(conn: HubLike): Promise<void> {
