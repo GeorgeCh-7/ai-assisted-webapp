@@ -11,11 +11,13 @@ export default function RegisterPage() {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
 
   const { mutate: register, isPending: registering, error: registerError } = useRegister()
   const { mutate: login, isPending: loggingIn } = useLogin()
 
   const isPending = registering || loggingIn
+  const passwordMismatch = confirmPassword.length > 0 && password !== confirmPassword
   const errorMessage =
     registerError instanceof ApiError
       ? registerError.message
@@ -25,6 +27,7 @@ export default function RegisterPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (passwordMismatch) return
     register(
       { username, email, password },
       {
@@ -86,8 +89,30 @@ export default function RegisterPage() {
                 disabled={isPending}
               />
             </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="confirm-password">
+                Confirm password
+              </label>
+              <Input
+                id="confirm-password"
+                type="password"
+                placeholder="Re-enter password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                required
+                disabled={isPending}
+                className={passwordMismatch ? 'border-destructive focus-visible:ring-destructive' : ''}
+              />
+              {passwordMismatch && (
+                <p className="text-xs text-destructive">Passwords do not match</p>
+              )}
+            </div>
             {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
-            <Button type="submit" className="w-full" disabled={isPending}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={isPending || passwordMismatch}
+            >
               {isPending ? 'Creating account…' : 'Create account'}
             </Button>
           </form>
