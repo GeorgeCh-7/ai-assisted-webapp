@@ -1,8 +1,18 @@
-import { defineConfig } from '@playwright/test'
+import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
-  testDir: '.',
+  testDir: './tests',
   timeout: 30_000,
-  // Assumes `docker compose up` is already running.
-  // Run with: cd e2e && npm ci && npm run install-browsers && npm test
+  retries: 0,
+  workers: 1,
+  use: {
+    baseURL: 'http://localhost:5173',
+    navigationTimeout: 10_000,
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
 })
