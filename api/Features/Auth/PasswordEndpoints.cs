@@ -90,9 +90,10 @@ public static class PasswordEndpoints
         await users.UpdateAsync(appUser);
 
         // Revoke all active sessions for this user
-        await db.Sessions
+        var sessions = await db.Sessions
             .Where(s => s.UserId == token.UserId && !s.IsRevoked)
-            .ExecuteUpdateAsync(s => s.SetProperty(p => p.IsRevoked, true));
+            .ToListAsync();
+        foreach (var s in sessions) s.IsRevoked = true;
 
         await db.SaveChangesAsync();
 

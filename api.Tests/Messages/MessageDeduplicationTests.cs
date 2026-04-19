@@ -39,7 +39,7 @@ public class MessageDeduplicationTests
         db.ChangeTracker.Clear();
         var retry = new Message { Id = key, RoomId = roomId, Content = "retry", Watermark = 2 };
         db.Messages.Add(retry);
-        try { await db.SaveChangesAsync(); } catch (DbUpdateException) { db.ChangeTracker.Clear(); }
+        try { await db.SaveChangesAsync(); } catch (Exception ex) when (ex is DbUpdateException or ArgumentException) { db.ChangeTracker.Clear(); }
 
         var count = await db.Messages.CountAsync(m => m.Id == key);
         Assert.Equal(1, count);
