@@ -1,0 +1,7 @@
+{
+  "name": "frontend-phase2",
+  "private": true,
+  "scripts": {
+    "test:e2e": "npm test --prefix e2e"
+  }
+}
