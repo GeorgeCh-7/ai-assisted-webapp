@@ -2,8 +2,10 @@ using System.Security.Claims;
 using System.Text;
 using Api.Data;
 using Api.Domain;
+using Api.Hubs;
 using Api.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Api.Features.Rooms;
@@ -104,7 +106,8 @@ public static class RoomsEndpoints
     static async Task<IResult> CreateRoom(
         CreateRoomRequest req,
         ClaimsPrincipal user,
-        AppDbContext db)
+        AppDbContext db,
+        IHubContext<ChatHub> hub)
     {
         if (string.IsNullOrWhiteSpace(req.Name))
             return Results.BadRequest(new { error = "Name is required" });
@@ -130,6 +133,20 @@ public static class RoomsEndpoints
             Role = "owner",
         });
         await db.SaveChangesAsync();
+
+        if (!room.IsPrivate)
+        {
+            await hub.Clients.Group("public-rooms-catalog").SendAsync("RoomCreated", new
+            {
+                id = room.Id.ToString(),
+                name = room.Name,
+                description = room.Description,
+                memberCount = 1,
+                isMember = false,
+                isPrivate = false,
+                myRole = (string?)null,
+            });
+        }
 
         return Results.Created($"/api/rooms/{room.Id}",
             new RoomResponse(room.Id, room.Name, room.Description, 1, true, room.IsPrivate, "owner"));

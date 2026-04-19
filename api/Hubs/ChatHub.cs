@@ -33,6 +33,9 @@ public class ChatHub : Hub
             // Auto-join personal notification group for invitations, friend requests, bans, etc.
             await Groups.AddToGroupAsync(Context.ConnectionId, $"user-{userId}");
 
+            // Auto-join public catalog group for real-time room creation/deletion
+            await Groups.AddToGroupAsync(Context.ConnectionId, "public-rooms-catalog");
+
             var wentOnline = await _presence.ConnectAsync(userId, _db);
 
             if (wentOnline)

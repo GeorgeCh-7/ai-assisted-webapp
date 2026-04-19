@@ -41,6 +41,12 @@ export function useGlobalHubEvents() {
       const { userId, status } = payload as { userId: string; status: PresenceStatus }
       qc.setQueryData<PresenceStatus>(['presence', userId], status)
     }
+    const handleRoomCreated = () => {
+      qc.invalidateQueries({ queryKey: ['rooms'] })
+    }
+    const handleRoomDeletedGlobal = () => {
+      qc.invalidateQueries({ queryKey: ['rooms'] })
+    }
 
     hub.on('FriendRequestReceived', handleFriendRequestReceived)
     hub.on('FriendRequestAccepted', handleFriendRequestAccepted)
@@ -50,6 +56,8 @@ export function useGlobalHubEvents() {
     hub.on('RoomInvitationReceived', handleInvitationReceived)
     hub.on('RoomBanned', handleRoomBanned)
     hub.on('PresenceChanged', handlePresence)
+    hub.on('RoomCreated', handleRoomCreated)
+    hub.on('RoomDeleted', handleRoomDeletedGlobal)
 
     return () => {
       hub.off('FriendRequestReceived', handleFriendRequestReceived)
@@ -60,6 +68,8 @@ export function useGlobalHubEvents() {
       hub.off('RoomInvitationReceived', handleInvitationReceived)
       hub.off('RoomBanned', handleRoomBanned)
       hub.off('PresenceChanged', handlePresence)
+      hub.off('RoomCreated', handleRoomCreated)
+      hub.off('RoomDeleted', handleRoomDeletedGlobal)
     }
   }, [hub, qc, navigate])
 }

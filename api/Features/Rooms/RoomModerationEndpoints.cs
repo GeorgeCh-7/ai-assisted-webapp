@@ -47,15 +47,20 @@ public static class RoomModerationEndpoints
         if (membership.Role != "owner")
             return Results.Json(new { error = "Only the owner can delete a room" }, statusCode: 403);
 
-        // Broadcast before delete so connected members receive the event
+        var room = await db.Rooms.FindAsync(id);
+
+        // Notify connected room members before delete so they can navigate away
         await hub.Clients.Group($"room-{id}").SendAsync("RoomDeleted", new { roomId = id.ToString() });
 
-        var room = await db.Rooms.FindAsync(id);
         if (room is not null)
         {
             db.Rooms.Remove(room);
             await db.SaveChangesAsync();
         }
+
+        // Fanout to catalog after commit so refetches see the room gone
+        if (room is not null && !room.IsPrivate)
+            await hub.Clients.Group("public-rooms-catalog").SendAsync("RoomDeleted", new { roomId = id.ToString() });
 
         return Results.Ok(new { });
     }
