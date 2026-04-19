@@ -431,6 +431,23 @@ Additions to Phase 1's `NOT_MEMBER`, `ROOM_NOT_FOUND`, `MESSAGE_TOO_LARGE`:
 
 ---
 
+## Phase 2 auth extension
+
+### POST /api/auth/login (extended)
+Request body adds `keepMeSignedIn: boolean` (default `false` if omitted). Phase 1 shipped with always-persistent cookies; this field makes persistence opt-in.
+
+```json
+{ "email": "string", "password": "string", "keepMeSignedIn": false }
+```
+
+Cookie-lifetime semantics:
+- `keepMeSignedIn: false` → session cookie (no `Expires` / `MaxAge`; browser clears on close). `AuthenticationProperties.IsPersistent = false`, `ExpiresUtc = null`.
+- `keepMeSignedIn: true` → persistent cookie. `AuthenticationProperties.IsPersistent = true`, `ExpiresUtc = now + 30 days`, `SlidingExpiration = true` (matching Phase 1's `ExpireTimeSpan` config).
+
+Response shape unchanged. Existing clients that omit the field get session-cookie behaviour.
+
+---
+
 ## Phase 2 REST Endpoints
 
 All require auth cookie. All mutating endpoints require `X-XSRF-TOKEN`. Pagination envelope (`{ items, nextCursor }`) matches Phase 1.
