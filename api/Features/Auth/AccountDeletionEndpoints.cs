@@ -36,16 +36,17 @@ public static class AccountDeletionEndpoints
             return Results.BadRequest(new { error = "Password incorrect" });
 
         // Pre-step for RESTRICT FKs on dm_threads: flip other_party_deleted_at before cascades
-        await db.DmThreads
+        var dmThreads = await db.DmThreads
             .Where(dt => dt.UserAId == callerId || dt.UserBId == callerId)
-            .ExecuteUpdateAsync(dt =>
-                dt.SetProperty(p => p.OtherPartyDeletedAt, DateTime.UtcNow));
+            .ToListAsync();
+        var now = DateTime.UtcNow;
+        foreach (var t in dmThreads) t.OtherPartyDeletedAt = now;
 
         // Null out dm_message author refs before cascade (RESTRICT means we must do this manually)
-        await db.DmMessages
+        var dmMessages = await db.DmMessages
             .Where(m => m.AuthorId == callerId)
-            .ExecuteUpdateAsync(m =>
-                m.SetProperty(p => p.AuthorId, (Guid?)null));
+            .ToListAsync();
+        foreach (var m in dmMessages) m.AuthorId = null;
 
         db.Users.Remove(appUser);
         await db.SaveChangesAsync();

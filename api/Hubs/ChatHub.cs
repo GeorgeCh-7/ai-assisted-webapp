@@ -430,7 +430,7 @@ public class ChatHub : Hub
                 return null;
             }
 
-            var otherUserId = thread.UserAId == userId ? thread.UserBId : thread.UserAId;
+            var otherUserId = (thread.UserAId == userId ? thread.UserBId : thread.UserAId).GetValueOrDefault();
             var (aId, bId) = Api.Features.Friends.FriendshipKey.Canonicalize(userId, otherUserId);
 
             var isFriend = await _db.Friendships
@@ -626,7 +626,7 @@ public class ChatHub : Hub
         var thread = await _db.DmThreads.FindAsync(threadId);
         if (thread is null) return;
 
-        var recipientId = thread.UserAId == senderUserId ? thread.UserBId : thread.UserAId;
+        var recipientId = (thread.UserAId == senderUserId ? thread.UserBId : thread.UserAId).GetValueOrDefault();
 
         var rows = await _db.DmUnreads
             .Where(u => u.UserId == recipientId && u.DmThreadId == threadId)

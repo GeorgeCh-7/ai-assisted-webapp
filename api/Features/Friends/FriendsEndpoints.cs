@@ -67,12 +67,12 @@ public static class FriendsEndpoints
             .ToHashSetAsync();
 
         var dmThreadMap = (await db.DmThreads
-            .Where(dt => (dt.UserAId == callerId && otherIds.Contains(dt.UserBId)) ||
-                         (dt.UserBId == callerId && otherIds.Contains(dt.UserAId)))
+            .Where(dt => (dt.UserAId == callerId && dt.UserBId.HasValue && otherIds.Contains(dt.UserBId.Value)) ||
+                         (dt.UserBId == callerId && dt.UserAId.HasValue && otherIds.Contains(dt.UserAId.Value)))
             .Select(dt => new { dt.UserAId, dt.UserBId, dt.Id })
             .ToListAsync())
             .ToDictionary(
-                x => x.UserAId == callerId ? x.UserBId : x.UserAId,
+                x => (x.UserAId == callerId ? x.UserBId : x.UserAId).GetValueOrDefault(),
                 x => x.Id);
 
         var items = friendships.Select(f =>

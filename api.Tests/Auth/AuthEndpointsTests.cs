@@ -154,4 +154,39 @@ public class AuthEndpointsTests : IClassFixture<TestWebApp>
         var meResp = await client.GetAsync("/api/auth/me");
         Assert.Equal(HttpStatusCode.Unauthorized, meResp.StatusCode);
     }
+
+    [Fact]
+    public async Task Login_KeepMeSignedInFalse_CookieHasNoExpiry()
+    {
+        var client = _factory.CreateClient();
+        var email = UniqueEmail();
+        await client.PostAsJsonAsync("/api/auth/register",
+            new { username = UniqueUsername(), email, password = "password123" });
+
+        var resp = await client.PostAsJsonAsync("/api/auth/login",
+            new { email, password = "password123", keepMeSignedIn = false });
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var setCookie = resp.Headers.GetValues("Set-Cookie").FirstOrDefault(c => c.Contains(".chat.session"));
+        Assert.NotNull(setCookie);
+        Assert.DoesNotContain("expires=", setCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("max-age=", setCookie, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Login_KeepMeSignedInTrue_CookieHasExpiry()
+    {
+        var client = _factory.CreateClient();
+        var email = UniqueEmail();
+        await client.PostAsJsonAsync("/api/auth/register",
+            new { username = UniqueUsername(), email, password = "password123" });
+
+        var resp = await client.PostAsJsonAsync("/api/auth/login",
+            new { email, password = "password123", keepMeSignedIn = true });
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var setCookie = resp.Headers.GetValues("Set-Cookie").FirstOrDefault(c => c.Contains(".chat.session"));
+        Assert.NotNull(setCookie);
+        Assert.Contains("expires=", setCookie, StringComparison.OrdinalIgnoreCase);
+    }
 }

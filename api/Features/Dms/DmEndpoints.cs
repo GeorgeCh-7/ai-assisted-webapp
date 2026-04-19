@@ -90,7 +90,9 @@ public static class DmEndpoints
             .GroupBy(m => m.DmThreadId)
             .ToDictionary(g => g.Key, g => g.First());
 
-        var otherIds = threads.Select(t => t.UserAId == callerId ? t.UserBId : t.UserAId).ToList();
+        var otherIds = threads
+            .Select(t => t.UserAId == callerId ? t.UserBId : t.UserAId)
+            .Where(id => id.HasValue).Select(id => id!.Value).ToList();
         var presenceMap = await db.UserPresences
             .Where(p => otherIds.Contains(p.UserId))
             .ToDictionaryAsync(p => p.UserId, p => p.Status);
@@ -102,9 +104,10 @@ public static class DmEndpoints
                 var otherId = t.UserAId == callerId ? t.UserBId : t.UserAId;
                 var otherUser = t.UserAId == callerId ? t.UserB : t.UserA;
                 var lastMsg = lastMsgMap.TryGetValue(t.Id, out var msg) ? msg : null;
+                var otherIdVal = otherId.GetValueOrDefault();
                 return new DmThreadListItem(
                     t.Id,
-                    new DmOtherUser(otherId, otherUser.UserName ?? "", presenceMap.GetValueOrDefault(otherId, "offline")),
+                    new DmOtherUser(otherIdVal, otherUser?.UserName ?? "[deleted user]", presenceMap.GetValueOrDefault(otherIdVal, "offline")),
                     lastMsg is null ? null : (lastMsg.DeletedAt.HasValue ? "" : lastMsg.Content),
                     lastMsg?.SentAt ?? t.CreatedAt,
                     unreads.GetValueOrDefault(t.Id, 0),
@@ -132,6 +135,7 @@ public static class DmEndpoints
 
         var otherId = thread.UserAId == callerId ? thread.UserBId : thread.UserAId;
         var otherUser = thread.UserAId == callerId ? thread.UserB : thread.UserA;
+        var otherIdVal = otherId.GetValueOrDefault();
 
         var presence = await db.UserPresences
             .Where(p => p.UserId == otherId)
@@ -140,7 +144,7 @@ public static class DmEndpoints
 
         return Results.Ok(new DmThreadResponse(
             thread.Id,
-            new DmOtherUser(otherId, otherUser.UserName ?? "", presence),
+            new DmOtherUser(otherIdVal, otherUser?.UserName ?? "[deleted user]", presence),
             thread.FrozenAt,
             thread.OtherPartyDeletedAt,
             thread.CurrentWatermark));
