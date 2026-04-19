@@ -27,6 +27,8 @@
 | Seeded by | `GET /api/auth/me` — backend calls `IAntiforgery.GetAndStoreTokens(ctx)` |
 | Required on | Every POST / PUT / PATCH / DELETE |
 
+**Request-token vs cookie-token — read this carefully.** `IAntiforgery.GetAndStoreTokens(ctx)` returns an `AntiforgeryTokenSet` with two distinct fields: `.CookieToken` and `.RequestToken`. The framework automatically writes `.CookieToken` to its own HttpOnly cookie (`.AspNetCore.Antiforgery.*`). The `XSRF-TOKEN` cookie we set manually in `/api/auth/me` must contain **`tokens.RequestToken`**, not a copy of the framework cookie and not `tokens.CookieToken`. The frontend reads `XSRF-TOKEN` and echoes it as `X-XSRF-TOKEN`, which the antiforgery middleware validates against the framework-managed cookie-token. Using the cookie-token value in `XSRF-TOKEN` produces a 400 `Bad Request` on every mutation with a cryptic `AntiforgeryValidationException`. This bug surfaced at the Phase 1 integration gate — the field-name clarification is recorded here so Phase 2+ agents do not repeat it.
+
 Frontend rule: the shared fetch wrapper must read `XSRF-TOKEN` from `document.cookie` and echo it as `X-XSRF-TOKEN` on every mutating request.
 
 ### CORS (dev)
@@ -354,3 +356,493 @@ Index: `ix_messages_room_watermark` on `(room_id, watermark DESC)` — required 
 **Cascade rationale:** `messages.author_id` is nullable with `ON DELETE SET NULL` so Phase 2 account deletion doesn't need to fan out into every historical message. The author-mapping layer substitutes a `[deleted user]` placeholder username when `author_id` is null — DTOs keep `authorId` / `authorUsername` non-nullable for Phase 1 consumers. `messages.room_id` cascades on room deletion (Phase 2 room delete nukes its history in one statement). These behaviors must be set on the FK relationships in `OnModelCreating` — EF Core defaults would `Restrict` and break Phase 2 deletion flows.
 
 **Phase 2 columns added now:** `rooms.is_private` and `room_memberships.role` are reserved columns — Phase 1 populates them with defaults (`false` / `'owner'` or `'member'`) but does not expose them in feature logic. Adding these columns in Phase 2 would require nuking the DB volume (since we use `EnsureCreated()`, not migrations). Adding them up-front avoids that.
+
+---
+
+# API Contracts — Phase 2
+
+> **Status: DRAFT — locks when both tracks agree.**
+> Additive to Phase 1. Phase 1 section above is LOCKED and unchanged except for the inline CSRF clarification.
+
+---
+
+## Phase 2 DB Schema additions
+
+Managed by `EnsureCreated()`. Schema churn requires one coordinated `docker compose down -v` at the start of Phase 2 Merge 1; after that, only new-table additions (no column changes to existing tables) until the next coordinated reset.
+
+### Modified Phase 1 tables
+
+| Table | Added columns |
+|-------|---------------|
+| `messages` | `edited_at timestamptz NULL`, `deleted_at timestamptz NULL`, `reply_to_message_id uuid NULL FK → messages.id ON DELETE SET NULL` |
+| `sessions` | (none — `user_agent` and `ip_address` were captured in Phase 1 for this) |
+
+### New tables
+
+| Table | Key columns |
+|-------|-------------|
+| `room_invitations` | `id uuid PK`, `room_id uuid FK ON DELETE CASCADE`, `invitee_user_id uuid FK ON DELETE CASCADE`, `invited_by_user_id uuid FK ON DELETE CASCADE`, `created_at`, `status text CHECK IN ('pending','accepted','declined','revoked')`, `responded_at timestamptz NULL`. Unique `(room_id, invitee_user_id)` where `status = 'pending'` |
+| `room_bans` | `room_id uuid`, `banned_user_id uuid` — composite PK, `banned_by_user_id uuid FK`, `banned_at timestamptz`, `reason text NULL`. FKs: `room_id ON DELETE CASCADE`, `banned_user_id ON DELETE CASCADE`, `banned_by_user_id ON DELETE SET NULL` (preserve ban when banner deletes their account) |
+| `friendships` | `user_a_id uuid`, `user_b_id uuid` — composite PK, `status text CHECK IN ('pending','accepted')`, `requested_by_user_id uuid FK`, `requested_at`, `accepted_at timestamptz NULL`. **Check constraint: `user_a_id < user_b_id`**. Both FKs `ON DELETE CASCADE` |
+| `user_bans` | `banner_user_id uuid`, `banned_user_id uuid` — composite PK, `banned_at timestamptz`. Both FKs `ON DELETE CASCADE`. Asymmetric — two-way ban requires two rows |
+| `dm_threads` | `id uuid PK`, `user_a_id uuid`, `user_b_id uuid`, `created_at`, `current_watermark bigint NOT NULL DEFAULT 0`, `frozen_at timestamptz NULL` (set when user_bans exists between a/b, cleared on unban), `other_party_deleted_at timestamptz NULL` (set when either party deletes their account). Unique `(user_a_id, user_b_id)` with check `user_a_id < user_b_id` for lookup canonicalization. FKs: `user_a_id` / `user_b_id` `ON DELETE RESTRICT` — account deletion handler explicitly flips `other_party_deleted_at` instead of cascading (decision 4) |
+| `dm_messages` | `id uuid PK` (= idempotency key), `dm_thread_id uuid FK ON DELETE CASCADE`, `author_id uuid FK NULL ON DELETE SET NULL`, `content text`, `sent_at`, `watermark bigint NOT NULL`, `edited_at timestamptz NULL`, `deleted_at timestamptz NULL`, `reply_to_message_id uuid NULL FK → dm_messages.id ON DELETE SET NULL`. Index: `(dm_thread_id, watermark DESC)` |
+| `dm_unreads` | `user_id uuid`, `dm_thread_id uuid` — composite PK, `count int`, `last_read_message_id uuid NULL`. FKs `ON DELETE CASCADE` |
+| `file_attachments` | `id uuid PK`, `uploader_id uuid FK NULL ON DELETE SET NULL`, `original_filename text`, `content_type text`, `size_bytes bigint`, `storage_path text`, `created_at`, `room_id uuid NULL FK ON DELETE CASCADE`, `dm_thread_id uuid NULL FK ON DELETE CASCADE`, `message_id uuid NULL FK → messages.id ON DELETE CASCADE`, `dm_message_id uuid NULL FK → dm_messages.id ON DELETE CASCADE`. Check: `(room_id IS NOT NULL) OR (dm_thread_id IS NOT NULL) OR (message_id IS NULL AND dm_message_id IS NULL)` — attachment is either scoped to a room, a DM thread, or pre-commit orphan |
+| `password_reset_tokens` | `token uuid PK`, `user_id uuid FK ON DELETE CASCADE`, `created_at`, `expires_at`, `consumed_at timestamptz NULL` |
+
+### Modified Phase 1 FK cascades
+
+Phase 1 set `messages.author_id SET NULL` and `messages.room_id CASCADE`. Phase 2 sets additional cascades on user deletion (decision 4):
+
+| FK | Cascade | Rationale |
+|---|---|---|
+| `rooms.created_by_id` | CASCADE | Owner deletion nukes their rooms → which cascades `messages`, `room_memberships`, `room_invitations`, `room_bans`, `file_attachments.room_id` |
+| `room_memberships.user_id` | CASCADE | Memberships in others' rooms dissolve |
+| `sessions.user_id` | CASCADE | Sessions go |
+| `friendships.user_a_id` / `user_b_id` | CASCADE both | Friendship row removed |
+| `user_bans.banner_user_id` / `banned_user_id` | CASCADE both | Ban row removed |
+| `room_invitations.invitee_user_id` | CASCADE | Pending invites dropped |
+| `dm_threads.user_a_id` / `user_b_id` | **RESTRICT** | Soft retention — account-delete handler flips `other_party_deleted_at` instead |
+| `dm_messages.author_id` | SET NULL | DM history preserved for the surviving party |
+| `file_attachments.uploader_id` | SET NULL | Files in other users' rooms persist as `[deleted user]` uploaded |
+
+---
+
+## Phase 2 Error codes
+
+Additions to Phase 1's `NOT_MEMBER`, `ROOM_NOT_FOUND`, `MESSAGE_TOO_LARGE`:
+
+**REST**: HTTP status + `{ error: "Human-readable message" }` — same envelope as Phase 1.
+
+**Hub** error codes (dispatched via `Clients.Caller.SendAsync("Error", …)`):
+
+| Code | When |
+|------|------|
+| `NOT_ADMIN` | Non-admin attempts admin-only hub action (e.g., delete another user's message) |
+| `NOT_AUTHOR` | Non-author attempts to edit a message |
+| `MESSAGE_NOT_FOUND` | Edit/delete target does not exist |
+| `NOT_FRIENDS` | DM send/open where caller and target are not mutual friends |
+| `USER_BANNED` | DM send where caller has banned target, or target has banned caller |
+| `THREAD_FROZEN` | DM send to a thread with `frozen_at` or `other_party_deleted_at` set |
+| `ROOM_BANNED` | Banned user attempts room hub action |
+| `DM_THREAD_NOT_FOUND` | Hub action against non-existent thread |
+| `INVALID_REPLY` | `replyToMessageId` references a message not in the same room/thread |
+
+---
+
+## Phase 2 REST Endpoints
+
+All require auth cookie. All mutating endpoints require `X-XSRF-TOKEN`. Pagination envelope (`{ items, nextCursor }`) matches Phase 1.
+
+### Room moderation + private rooms
+
+#### POST /api/rooms (extended)
+Adds `isPrivate: boolean` to request body (default `false`). Private rooms are excluded from `GET /api/rooms` unless the caller is a member or has a pending invitation. All other response shape unchanged.
+
+#### DELETE /api/rooms/{id}
+Auth: owner only.
+Broadcasts `RoomDeleted` hub event to `room-{id}` before the DB row is deleted (group dispatch first, then `SaveChangesAsync()` — members get the event, cascades do the rest).
+
+Response 200: `{}`
+Errors: `404 { "error": "Room not found" }` · `403 { "error": "Only the owner can delete a room" }`
+
+#### GET /api/rooms/{id}/members
+Auth: room member.
+Response 200:
+```json
+{
+  "items": [
+    { "userId": "uuid", "username": "string", "role": "owner | admin | member", "joinedAt": "iso8601", "presence": "online | afk | offline" }
+  ],
+  "nextCursor": null
+}
+```
+No pagination in Phase 2 (brief sizes rooms ≤ 1000 members; single-page fetch acceptable). `nextCursor` stays in the envelope for forward compatibility.
+
+#### GET /api/rooms/{id}/bans
+Auth: room owner/admin.
+```json
+{
+  "items": [
+    { "userId": "uuid", "username": "string", "bannedByUserId": "uuid", "bannedByUsername": "string", "bannedAt": "iso8601", "reason": "string | null" }
+  ],
+  "nextCursor": null
+}
+```
+
+#### POST /api/rooms/{id}/members/{userId}/promote
+Auth: room owner. Promotes member → admin.
+Broadcasts `RoleChanged` to `room-{id}`.
+
+Response 200: `{ "userId": "uuid", "role": "admin" }`
+Errors: `403 { "error": "Only the owner can promote admins" }` · `404 { "error": "Member not found" }` · `400 { "error": "User is already an admin" }`
+
+#### POST /api/rooms/{id}/members/{userId}/demote
+Auth: room owner. Demotes admin → member.
+Broadcasts `RoleChanged`.
+
+Response 200: `{ "userId": "uuid", "role": "member" }`
+Errors: same shape as promote + `400 { "error": "User is not an admin" }`
+
+#### POST /api/rooms/{id}/members/{userId}/ban
+Auth: room owner (any target) or admin (non-admin targets only).
+Body: `{ "reason": "string | null" }`
+Writes `room_bans` row, deletes `room_memberships` row, broadcasts `RoomBanned` hub event to the banned user (forces UI to exit) and `UserLeftRoom` to the group.
+
+Response 200: `{}`
+Errors: `403 { "error": "Insufficient role" }` (admin tries to ban owner/another admin) · `404 { "error": "Room not found" }` · `400 { "error": "User is not a member" }`
+
+#### POST /api/rooms/{id}/members/{userId}/unban
+Auth: room owner/admin. Deletes `room_bans` row. User can rejoin via normal join flow.
+
+Response 200: `{}`
+Errors: `404 { "error": "Ban not found" }`
+
+### Room invitations
+
+#### POST /api/rooms/{id}/invitations
+Auth: private room owner/admin. Public rooms: 400 (no invitations needed).
+Body: `{ "username": "string" }`
+Writes `room_invitations` row (`status='pending'`), fires `RoomInvitationReceived` hub event to the invitee.
+
+Response 201:
+```json
+{ "id": "uuid", "roomId": "uuid", "inviteeUserId": "uuid", "inviteeUsername": "string", "status": "pending", "createdAt": "iso8601" }
+```
+Errors: `404 { "error": "User not found" }` · `400 { "error": "User is already a member" }` · `400 { "error": "Invitation already pending" }` · `400 { "error": "Public rooms do not use invitations" }` · `403 { "error": "Only owner or admin can invite" }`
+
+#### GET /api/invitations
+Auth: caller. Lists the caller's incoming pending invitations.
+```json
+{
+  "items": [
+    { "id": "uuid", "roomId": "uuid", "roomName": "string", "invitedByUsername": "string", "createdAt": "iso8601" }
+  ],
+  "nextCursor": null
+}
+```
+
+#### POST /api/invitations/{id}/accept
+Auth: the invitee only. Inserts `room_memberships` (`role='member'`), flips invitation to `accepted`. Returns the joined room DTO (same shape as `GET /api/rooms/{id}`).
+
+Errors: `404 { "error": "Invitation not found" }` · `400 { "error": "Invitation is not pending" }`
+
+#### POST /api/invitations/{id}/decline
+Flips invitation to `declined`. Response 200: `{}`.
+
+### Messages — edit + delete
+
+#### PATCH /api/messages/{id}
+Auth: author only. Body: `{ "content": "string" }`.
+Validates ≤ 3072 UTF-8 bytes (same as send).
+Sets `edited_at = now()`, updates `content`. Broadcasts `MessageEdited` to `room-{roomId}`.
+
+Response 200: full message DTO (same shape as `MessageReceived`).
+Errors: `403 { "error": "Only the author can edit" }` · `404` · `400 { "error": "Message exceeds 3 KB" }` · `400 { "error": "Message is deleted" }`
+
+#### DELETE /api/messages/{id}
+Auth: author OR room admin/owner (brief 2.5.5).
+Soft-delete: sets `deleted_at = now()`, clears `content` server-side. Broadcasts `MessageDeleted`. Subsequent reads return the row with `deletedAt` set and empty `content` — frontend renders placeholder.
+
+Response 200: `{}`
+Errors: `403 { "error": "Insufficient permission to delete" }` · `404`. Deleting already-deleted is 200 (idempotent).
+
+#### SendMessage (hub) — extended
+Request adds optional fields:
+```ts
+{ roomId: string, content: string, idempotencyKey: string, replyToMessageId?: string | null, attachmentFileIds?: string[] }
+```
+`replyToMessageId`: must reference a message in the same room. Hub validates and dispatches `Error { code: "INVALID_REPLY" }` on mismatch.
+`attachmentFileIds`: array of `file_attachments.id` values that belong to this caller with `message_id IS NULL`. Hub sets `file_attachments.message_id = @newMessageId` for each on persist.
+
+### Friends / contacts
+
+#### GET /api/friends
+```json
+{
+  "items": [
+    { "userId": "uuid", "username": "string", "acceptedAt": "iso8601", "presence": "online | afk | offline", "isBanned": false, "isBannedBy": false, "dmThreadId": "uuid | null" }
+  ],
+  "nextCursor": null
+}
+```
+`isBanned`: caller has banned this user. `isBannedBy`: this user has banned caller. `dmThreadId`: populated if a thread exists (eager hydration — cheap join, avoids an extra round-trip).
+
+#### POST /api/friends/requests
+Body: `{ "username": "string", "message": "string | null" }`
+Writes `friendships` row (canonicalized, `status='pending'`). `requested_by_user_id` records direction. Fires `FriendRequestReceived` hub event to the other party.
+
+Response 201: `{ "username": "string", "status": "pending" }`
+Errors: `404 { "error": "User not found" }` · `400 { "error": "Cannot friend yourself" }` · `400 { "error": "Friend request already pending" }` · `400 { "error": "Already friends" }` · `400 { "error": "User has banned you" }` (if `user_bans` exists where target banned caller)
+
+#### GET /api/friends/requests
+Response:
+```json
+{
+  "incoming": [
+    { "userId": "uuid", "username": "string", "message": "string | null", "requestedAt": "iso8601" }
+  ],
+  "outgoing": [
+    { "userId": "uuid", "username": "string", "requestedAt": "iso8601" }
+  ]
+}
+```
+
+#### POST /api/friends/requests/{userId}/accept
+Caller is the invitee. Flips `friendships.status = 'accepted'`, sets `accepted_at`. Fires `FriendRequestAccepted` hub event to the other party. Response: `{ "userId": "uuid", "username": "string" }`.
+
+#### POST /api/friends/requests/{userId}/decline
+Deletes the pending `friendships` row. Fires `FriendRequestDeclined`. Response: `{}`.
+
+#### DELETE /api/friends/{userId}
+Removes friendship. Fires `FriendRemoved` hub event to the other party. DM thread (if any) persists but gets `frozen_at` left unchanged (friendship removal alone does not freeze; only user-ban does). Response: `{}`.
+
+#### POST /api/friends/{userId}/ban
+Writes `user_bans(banner=caller, banned=userId)`. Sets `dm_threads.frozen_at = now()` on the thread with this user (if exists). Fires `UserBanned` hub event to the banned user. Response: `{}`.
+
+#### DELETE /api/friends/{userId}/ban
+Removes `user_bans` row. Clears `dm_threads.frozen_at` **only if** no reverse ban exists. Response: `{}`.
+
+### Direct Messages
+
+#### POST /api/dms/open
+Body: `{ "userId": "uuid" }`
+Ensures a `dm_threads` row exists with the caller + target (creates on conflict do nothing, then returns). Rejects with 403 if caller and target are not mutual friends, or if any `user_bans` row exists between them.
+
+Response 200:
+```json
+{ "id": "uuid", "otherUser": { "userId": "uuid", "username": "string", "presence": "online | afk | offline" }, "frozenAt": null, "otherPartyDeletedAt": null, "currentWatermark": 0 }
+```
+
+#### GET /api/dms
+List caller's DM threads, ordered by most recent activity.
+```json
+{
+  "items": [
+    { "id": "uuid", "otherUser": {...}, "lastMessagePreview": "string | null", "lastActivityAt": "iso8601", "unreadCount": 0, "frozenAt": null, "otherPartyDeletedAt": null }
+  ],
+  "nextCursor": "string | null"
+}
+```
+
+#### GET /api/dms/{threadId}
+Auth: thread participant. Same DTO shape as `POST /api/dms/open` response.
+
+#### GET /api/dms/{threadId}/messages
+Same contract as `GET /api/rooms/{id}/messages` — `before` / `since` / `limit`, cursor pagination on thread-scoped watermark. Response item shape matches room message DTO plus `dmThreadId` replacing `roomId`.
+
+### Files
+
+#### POST /api/files
+Auth: caller. CSRF: required. Multipart form data:
+- `file`: binary
+- `scope`: `"room" | "dm"` (informational — access is still resolved at download time)
+- `scopeId`: `roomId` or `dmThreadId` that the caller must already be a member of / participant in
+- `originalFilename`: string (taken from the multipart filename if omitted)
+
+Validates size: 20 MB for any file; 3 MB for images (`Content-Type` starts with `image/`). Persists to filesystem `/var/chat-files/{yyyy}/{mm}/{fileId}`. Inserts `file_attachments` row with `message_id = NULL`, `dm_message_id = NULL`, `room_id` or `dm_thread_id` set.
+
+Response 201:
+```json
+{ "id": "uuid", "originalFilename": "string", "contentType": "string", "sizeBytes": 0, "scope": "room | dm", "scopeId": "uuid" }
+```
+Errors: `413 { "error": "File exceeds 20 MB" }` · `413 { "error": "Image exceeds 3 MB" }` · `403 { "error": "Not a member" }` / `403 { "error": "Not a DM participant" }` · `400 { "error": "Scope id required" }`
+
+#### GET /api/files/{id}
+Auth: caller must be a current member of the file's room (if `room_id` set) OR participant in the file's DM thread (if `dm_thread_id` set) OR the uploader (pre-commit pickup). Access result cached 30 s in `MemoryCache` keyed by `(userId, fileId)`. Streams binary with:
+- `Content-Type: <stored>`
+- `Content-Disposition: inline; filename="<original>"` (browsers treat image inline, non-image as download)
+
+Errors: `403 { "error": "Access denied" }` · `404 { "error": "File not found" }` · `410 { "error": "File has been removed" }` (row deleted but FS cleanup lag — shouldn't happen if cascades work, included for robustness)
+
+### Sessions
+
+#### GET /api/auth/sessions
+```json
+{
+  "items": [
+    { "id": "uuid", "userAgent": "string | null", "ipAddress": "string | null", "createdAt": "iso8601", "lastSeenAt": "iso8601", "isCurrent": true }
+  ],
+  "nextCursor": null
+}
+```
+`isCurrent` is true for the session backing this HTTP call. Revoked sessions are not returned.
+
+#### POST /api/auth/sessions/{id}/revoke
+Marks session revoked. If the revoked session is the current one, also clears the `.chat.session` cookie in the response. Response 200: `{}`.
+
+### Password
+
+#### POST /api/auth/change-password
+Body: `{ "currentPassword": "string", "newPassword": "string" }`
+Verifies `currentPassword` via `IPasswordHasher`. Updates hash. Does **not** revoke other sessions (brief doesn't require it — session revocation stays manual via Sessions UI).
+
+Response 200: `{}`
+Errors: `400 { "error": "Current password incorrect" }` · `400 { "error": "Password must be at least 6 characters" }`
+
+#### POST /api/auth/forgot-password
+Body: `{ "email": "string" }`
+Always returns 200 with a token (even for unknown email — real tokens are only valid for existing users; unknown-email returns a fake token to avoid user enumeration).
+
+Response 200:
+```json
+{ "resetToken": "uuid", "expiresAt": "iso8601" }
+```
+(Hackathon convention — the token is displayed on-screen in lieu of email delivery.)
+
+#### POST /api/auth/reset-password
+Body: `{ "token": "uuid", "newPassword": "string" }`
+Consumes token (`consumed_at = now()`), sets new hash. Revokes all sessions for the user (explicit: set `is_revoked = true` on every `sessions` row for this user).
+
+Response 200: `{}`
+Errors: `400 { "error": "Token invalid or expired" }` · `400 { "error": "Password must be at least 6 characters" }`
+
+### Account
+
+#### DELETE /api/auth/me
+Body: `{ "password": "string" }`
+Verifies password. In a single transaction:
+1. Flip `dm_threads.other_party_deleted_at = now()` on every thread where user is a participant.
+2. Set `dm_messages.author_id = NULL` for every message authored by user.
+3. `_db.Users.Remove(user); await SaveChangesAsync();` — FK cascades handle rooms, memberships, friendships, user_bans, sessions, file_attachments.uploader_id (SET NULL).
+
+Response 200: `{}` + cookie cleared.
+Errors: `400 { "error": "Password incorrect" }`
+
+---
+
+## Phase 2 SignalR additions
+
+### Client → Server
+
+#### EditMessage
+```ts
+{ messageId: string, content: string }
+```
+Room context inferred from the message. Permission check: caller is author.
+Rejects: `NOT_AUTHOR`, `MESSAGE_NOT_FOUND`, `MESSAGE_TOO_LARGE`.
+On success broadcasts `MessageEdited`; returns the updated message DTO.
+
+#### DeleteMessage
+```ts
+{ messageId: string }
+```
+Permission: author OR room admin/owner.
+Rejects: `NOT_ADMIN`, `MESSAGE_NOT_FOUND`.
+On success broadcasts `MessageDeleted`; returns `{ id, deletedAt }`.
+
+#### JoinDm
+```ts
+{ threadId: string }
+```
+Adds caller to `dm-{threadId}` group. Validates caller is a participant. Rejects `DM_THREAD_NOT_FOUND`.
+Returns `{ currentWatermark: number }`.
+
+#### LeaveDm
+```ts
+{ threadId: string }
+```
+
+#### SendDirectMessage
+```ts
+{ threadId: string, content: string, idempotencyKey: string, replyToMessageId?: string | null, attachmentFileIds?: string[] }
+```
+Validates: participant, thread not `frozen_at` / `other_party_deleted_at`, content size, friendship + no-ban (re-checked at send, not just at thread open).
+Rejects: `NOT_FRIENDS`, `USER_BANNED`, `THREAD_FROZEN`, `MESSAGE_TOO_LARGE`, `INVALID_REPLY`.
+Broadcasts `DirectMessageReceived`. Returns persisted DM DTO.
+
+#### EditDirectMessage / DeleteDirectMessage
+Same shape as room variants; permission = author only (no admin concept in DMs). DM broadcasts `DirectMessageEdited` / `DirectMessageDeleted`.
+
+### Server → Client
+
+#### MessageEdited
+To: `room-{roomId}`
+```ts
+{
+  id: string, roomId: string, authorId: string, authorUsername: string,
+  content: string, sentAt: string, idempotencyKey: string, watermark: number,
+  editedAt: string, deletedAt: null, replyToMessageId: string | null,
+  attachments: FileAttachmentDto[]
+}
+```
+
+#### MessageDeleted
+To: `room-{roomId}`
+```ts
+{ id: string, roomId: string, deletedAt: string }
+```
+
+#### DirectMessageReceived
+To: `dm-{threadId}`. Same field shape as `MessageReceived` with `dmThreadId` replacing `roomId`.
+
+#### DirectMessageEdited / DirectMessageDeleted
+Same shapes as room variants, scoped to `dm-{threadId}`.
+
+#### RoomInvitationReceived
+To: personal user group `user-{userId}` (new group added in Phase 2 — caller auto-joins in `OnConnectedAsync`).
+```ts
+{ invitationId: string, roomId: string, roomName: string, invitedByUsername: string, createdAt: string }
+```
+
+#### RoomDeleted
+To: `room-{roomId}` (broadcast immediately before the row is deleted).
+```ts
+{ roomId: string }
+```
+
+#### RoomBanned
+To: `user-{bannedUserId}`.
+```ts
+{ roomId: string, bannedByUsername: string, reason: string | null }
+```
+
+#### RoleChanged
+To: `room-{roomId}`.
+```ts
+{ userId: string, roomId: string, role: 'owner' | 'admin' | 'member' }
+```
+
+#### FriendRequestReceived
+To: `user-{toUserId}`.
+```ts
+{ fromUserId: string, fromUsername: string, message: string | null, requestedAt: string }
+```
+
+#### FriendRequestAccepted
+To: `user-{requesterUserId}`.
+```ts
+{ userId: string, username: string, acceptedAt: string, dmThreadId: string | null }
+```
+
+#### FriendRequestDeclined
+To: `user-{requesterUserId}`.
+```ts
+{ userId: string }
+```
+
+#### FriendRemoved
+To: `user-{otherUserId}`.
+```ts
+{ userId: string }
+```
+
+#### UserBanned
+To: `user-{bannedUserId}`.
+```ts
+{ byUserId: string, byUsername: string, bannedAt: string }
+```
+
+#### PresenceChanged (extended)
+Unchanged payload shape — Phase 2 now emits `'afk'` in addition to `'online'` / `'offline'`. Phase 1's reserved enum value activates here.
+
+### Hub group additions
+
+| Group | Joined when | Purpose |
+|-------|-------------|---------|
+| `room-{roomId}` | `JoinRoom` (Phase 1) | Room message + presence broadcasts |
+| `dm-{threadId}` | `JoinDm` | DM message broadcasts |
+| `user-{userId}` | `OnConnectedAsync` auto-joins for the connected user | Personal notifications: invitations, friend requests, user-ban, room-ban, room-delete |
+
+`user-{userId}` group is the plumbing for personal notifications that are not room-scoped. Auto-join in `OnConnectedAsync` keeps the hub API symmetric (caller never invokes a `JoinUser`).
