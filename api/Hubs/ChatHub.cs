@@ -602,6 +602,7 @@ public class ChatHub : Hub
         editedAt = msg.EditedAt,
         deletedAt = msg.DeletedAt,
         replyToMessageId = msg.ReplyToMessageId?.ToString(),
+        attachments = Array.Empty<object>(),
     };
 
     private async Task<long> NextDmWatermarkAsync(Guid threadId)

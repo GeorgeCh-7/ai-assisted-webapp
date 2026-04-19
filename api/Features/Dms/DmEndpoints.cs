@@ -198,7 +198,8 @@ public static class DmEndpoints
             m.Watermark,
             m.EditedAt,
             m.DeletedAt,
-            m.ReplyToMessageId));
+            m.ReplyToMessageId,
+            Array.Empty<Api.Features.Messages.FileAttachmentResponse>()));
 
         return Results.Ok(new PagedResponse<DmMessageResponse>(items, nextCursor));
     }

@@ -29,6 +29,7 @@ public record DmMessageResponse(
     long Watermark,
     DateTime? EditedAt,
     DateTime? DeletedAt,
-    Guid? ReplyToMessageId);
+    Guid? ReplyToMessageId,
+    IReadOnlyList<Api.Features.Messages.FileAttachmentResponse> Attachments);
 
 public record OpenDmRequest(Guid UserId);
