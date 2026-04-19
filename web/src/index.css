@@ -27,25 +27,26 @@
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    /* Discord-inspired dark palette */
+    --background: 228 7% 21%;        /* #313338 main chat area */
+    --foreground: 210 11% 96%;       /* #dcddde near-white */
+    --card: 228 7% 24%;              /* #383a40 slightly elevated */
+    --card-foreground: 210 11% 96%;
+    --popover: 228 6% 18%;           /* #2b2d31 sidebar/dropdown level */
+    --popover-foreground: 210 11% 96%;
     --primary: 0 0% 98%;
     --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --secondary: 228 6% 27%;         /* #404249 input / hover lift */
+    --secondary-foreground: 210 11% 96%;
+    --muted: 228 6% 18%;             /* #2b2d31 sidebar panel bg */
+    --muted-foreground: 215 9% 60%;  /* #949ba4 subdued labels */
+    --accent: 228 6% 27%;
+    --accent-foreground: 210 11% 96%;
+    --destructive: 0 62.8% 50%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --border: 228 6% 14%;            /* very dark border */
+    --input: 228 6% 27%;             /* #404249 */
+    --ring: 142 71% 45%;             /* emerald focus ring */
   }
 }
 

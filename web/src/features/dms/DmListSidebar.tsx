@@ -21,8 +21,8 @@ export default function DmListSidebar() {
           <Link
             key={t.id}
             to={`/dms/${t.id}`}
-            className={`flex items-center gap-1.5 rounded px-2 py-1 text-xs font-mono transition-colors hover:bg-muted/60 ${
-              isActive ? 'bg-muted/70 text-foreground' : 'text-muted-foreground'
+            className={`flex items-center gap-1.5 rounded px-2 py-1 text-xs font-mono transition-colors hover:bg-secondary/40 ${
+              isActive ? 'bg-secondary/50 text-foreground' : 'text-muted-foreground'
             }`}
           >
             <PresenceIndicator userId={t.otherUser.userId} />

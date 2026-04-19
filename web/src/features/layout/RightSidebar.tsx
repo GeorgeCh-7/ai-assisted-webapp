@@ -11,7 +11,7 @@ export default function RightSidebar() {
   const myRooms = (data?.pages.flatMap(p => p.items) ?? []).filter(r => r.isMember)
 
   return (
-    <div className="w-52 border-l bg-muted/10 flex flex-col shrink-0 overflow-y-auto">
+    <div className="w-52 border-l bg-muted flex flex-col shrink-0 overflow-y-auto">
       <div className="px-2 py-2 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60">
         My Rooms
       </div>
@@ -62,8 +62,8 @@ function SidebarRoomRow({
   return (
     <Link
       to={`/rooms/${roomId}`}
-      className={`flex items-center gap-1.5 rounded px-2 py-1 text-xs font-mono transition-colors hover:bg-muted/60 ${
-        isActive ? 'bg-muted/70 text-foreground' : 'text-muted-foreground'
+      className={`flex items-center gap-1.5 rounded px-2 py-1 text-xs font-mono transition-colors hover:bg-secondary/40 ${
+        isActive ? 'bg-secondary/50 text-foreground' : 'text-muted-foreground'
       }`}
     >
       <span className={`${isActive ? 'text-emerald-600 dark:text-emerald-400' : 'opacity-50'}`}>

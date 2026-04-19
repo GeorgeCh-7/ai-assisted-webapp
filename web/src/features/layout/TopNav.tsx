@@ -33,7 +33,7 @@ export default function TopNav() {
   }
 
   return (
-    <nav className="h-10 border-b bg-background flex items-center px-3 gap-4 shrink-0 z-20">
+    <nav className="h-10 border-b bg-muted flex items-center px-3 gap-4 shrink-0 z-20">
       {/* Logo */}
       <Link
         to="/rooms"
