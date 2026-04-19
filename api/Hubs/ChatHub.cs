@@ -139,6 +139,19 @@ public class ChatHub : Hub
                 return null;
             }
 
+            // Validate replyToMessageId if provided
+            if (args.ReplyToMessageId.HasValue)
+            {
+                var replyExists = await _db.Messages.AnyAsync(m =>
+                    m.Id == args.ReplyToMessageId.Value && m.RoomId == args.RoomId);
+                if (!replyExists)
+                {
+                    await Clients.Caller.SendAsync("Error",
+                        new { code = "INVALID_REPLY", message = "Reply target not found in this room" });
+                    return null;
+                }
+            }
+
             var watermark = await NextWatermarkAsync(args.RoomId);
 
             var msg = new Message
@@ -149,6 +162,7 @@ public class ChatHub : Hub
                 Content = args.Content,
                 SentAt = DateTime.UtcNow,
                 Watermark = watermark,
+                ReplyToMessageId = args.ReplyToMessageId,
             };
             _db.Messages.Add(msg);
 
@@ -262,18 +276,85 @@ public class ChatHub : Hub
     public async Task<object?> EditMessage(EditMessageArgs args)
     {
         using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+        using (LogContext.PushProperty("UserId", Context.UserIdentifier))
         {
-            await Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "EditMessage not yet implemented" });
-            return null;
+            var userId = GetUserId();
+
+            if (Encoding.UTF8.GetByteCount(args.Content) > 3072)
+            {
+                await Clients.Caller.SendAsync("Error",
+                    new { code = "MESSAGE_TOO_LARGE", message = "Message exceeds 3 KB" });
+                return null;
+            }
+
+            var msg = await _db.Messages.FindAsync(args.MessageId);
+            if (msg is null)
+            {
+                await Clients.Caller.SendAsync("Error",
+                    new { code = "MESSAGE_NOT_FOUND", message = "Message not found" });
+                return null;
+            }
+
+            if (msg.AuthorId != userId)
+            {
+                await Clients.Caller.SendAsync("Error",
+                    new { code = "NOT_AUTHOR", message = "Only the author can edit this message" });
+                return null;
+            }
+
+            msg.Content = args.Content;
+            msg.EditedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            var author = await _db.Users.FindAsync(userId);
+            var payload = MessagePayload(msg, author?.UserName ?? "[deleted user]");
+            await Clients.Group(GroupName(msg.RoomId)).SendAsync("MessageEdited", payload);
+            return payload;
         }
     }
 
     public async Task<object?> DeleteMessage(DeleteMessageArgs args)
     {
         using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
+        using (LogContext.PushProperty("UserId", Context.UserIdentifier))
         {
-            await Clients.Caller.SendAsync("Error", new { code = "NOT_IMPLEMENTED", message = "DeleteMessage not yet implemented" });
-            return null;
+            var userId = GetUserId();
+
+            var msg = await _db.Messages.FindAsync(args.MessageId);
+            if (msg is null)
+            {
+                await Clients.Caller.SendAsync("Error",
+                    new { code = "MESSAGE_NOT_FOUND", message = "Message not found" });
+                return null;
+            }
+
+            var membership = await _db.RoomMemberships
+                .FirstOrDefaultAsync(m => m.RoomId == msg.RoomId && m.UserId == userId);
+            var isAuthor = msg.AuthorId == userId;
+            var isAdminOrOwner = membership?.Role is "admin" or "owner";
+
+            if (!isAuthor && !isAdminOrOwner)
+            {
+                await Clients.Caller.SendAsync("Error",
+                    new { code = "NOT_ADMIN", message = "Insufficient permission to delete" });
+                return null;
+            }
+
+            if (!msg.DeletedAt.HasValue)
+            {
+                msg.DeletedAt = DateTime.UtcNow;
+                msg.Content = "";
+                await _db.SaveChangesAsync();
+            }
+
+            var result = new { id = msg.Id.ToString(), deletedAt = msg.DeletedAt };
+            await Clients.Group(GroupName(msg.RoomId)).SendAsync("MessageDeleted", new
+            {
+                id = msg.Id.ToString(),
+                roomId = msg.RoomId.ToString(),
+                deletedAt = msg.DeletedAt,
+            });
+            return result;
         }
     }
 
@@ -327,13 +408,13 @@ public class ChatHub : Hub
         roomId = msg.RoomId.ToString(),
         authorId = msg.AuthorId?.ToString() ?? "",
         authorUsername,
-        content = msg.Content,
+        content = msg.DeletedAt.HasValue ? "" : msg.Content,
         sentAt = msg.SentAt,
         idempotencyKey = msg.Id.ToString(),
         watermark = msg.Watermark,
-        editedAt = (object?)null,
-        deletedAt = (object?)null,
-        replyToMessageId = (object?)null,
+        editedAt = msg.EditedAt,
+        deletedAt = msg.DeletedAt,
+        replyToMessageId = msg.ReplyToMessageId?.ToString(),
     };
 }
 
