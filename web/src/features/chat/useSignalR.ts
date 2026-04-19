@@ -159,6 +159,10 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
       qc.invalidateQueries({ queryKey: ['friends'] })
     }
 
+    const handleFriendRequestDeclined = () => {
+      qc.invalidateQueries({ queryKey: ['friend-requests'] })
+    }
+
     const handleFriendRemoved = () => {
       qc.invalidateQueries({ queryKey: ['friends'] })
     }
@@ -224,6 +228,7 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
         conn.on('RoomInvitationReceived', handleInvitationReceived)
         conn.on('FriendRequestReceived', handleFriendRequestReceived)
         conn.on('FriendRequestAccepted', handleFriendRequestAccepted)
+        conn.on('FriendRequestDeclined', handleFriendRequestDeclined)
         conn.on('FriendRemoved', handleFriendRemoved)
         conn.on('UserBanned', handleUserBanned)
 
@@ -281,6 +286,7 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
         conn.off('RoomInvitationReceived', handleInvitationReceived)
         conn.off('FriendRequestReceived', handleFriendRequestReceived)
         conn.off('FriendRequestAccepted', handleFriendRequestAccepted)
+        conn.off('FriendRequestDeclined', handleFriendRequestDeclined)
         conn.off('FriendRemoved', handleFriendRemoved)
         conn.off('UserBanned', handleUserBanned)
         conn.invoke('LeaveRoom', { roomId }).catch(() => {})
