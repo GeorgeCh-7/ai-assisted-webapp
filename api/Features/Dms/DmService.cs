@@ -7,7 +7,7 @@ namespace Api.Features.Dms;
 
 public static class DmService
 {
-    public static async Task<DmThread> EnsureThreadAsync(Guid callerId, Guid targetId, AppDbContext db)
+    public static async Task<(DmThread Thread, bool IsNew)> EnsureThreadAsync(Guid callerId, Guid targetId, AppDbContext db)
     {
         var (aId, bId) = FriendshipKey.Canonicalize(callerId, targetId);
 
@@ -19,8 +19,9 @@ public static class DmService
             thread = new DmThread { Id = Guid.NewGuid(), UserAId = aId, UserBId = bId };
             db.DmThreads.Add(thread);
             await db.SaveChangesAsync();
+            return (thread, true);
         }
 
-        return thread;
+        return (thread, false);
     }
 }

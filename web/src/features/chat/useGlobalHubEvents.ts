@@ -47,6 +47,9 @@ export function useGlobalHubEvents() {
     const handleRoomDeletedGlobal = () => {
       qc.invalidateQueries({ queryKey: ['rooms'] })
     }
+    const handleDmThreadCreated = () => {
+      qc.invalidateQueries({ queryKey: ['dms'] })
+    }
 
     hub.on('FriendRequestReceived', handleFriendRequestReceived)
     hub.on('FriendRequestAccepted', handleFriendRequestAccepted)
@@ -58,6 +61,7 @@ export function useGlobalHubEvents() {
     hub.on('PresenceChanged', handlePresence)
     hub.on('RoomCreated', handleRoomCreated)
     hub.on('RoomDeleted', handleRoomDeletedGlobal)
+    hub.on('DmThreadCreated', handleDmThreadCreated)
 
     return () => {
       hub.off('FriendRequestReceived', handleFriendRequestReceived)
@@ -70,6 +74,7 @@ export function useGlobalHubEvents() {
       hub.off('PresenceChanged', handlePresence)
       hub.off('RoomCreated', handleRoomCreated)
       hub.off('RoomDeleted', handleRoomDeletedGlobal)
+      hub.off('DmThreadCreated', handleDmThreadCreated)
     }
   }, [hub, qc, navigate])
 }

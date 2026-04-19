@@ -3,8 +3,10 @@ using Api.Data;
 using Api.Domain;
 using Api.Features.Friends;
 using Api.Features.Rooms;
+using Api.Hubs;
 using Api.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Api.Features.Dms;
@@ -27,7 +29,7 @@ public static class DmEndpoints
         return app;
     }
 
-    static async Task<IResult> OpenDmThread(OpenDmRequest req, ClaimsPrincipal user, AppDbContext db)
+    static async Task<IResult> OpenDmThread(OpenDmRequest req, ClaimsPrincipal user, AppDbContext db, IHubContext<ChatHub> hub)
     {
         var callerId = GetUserId(user);
 
@@ -51,7 +53,13 @@ public static class DmEndpoints
         if (isBanned)
             return Results.Json(new { error = "User ban exists" }, statusCode: 403);
 
-        var thread = await DmService.EnsureThreadAsync(callerId, req.UserId, db);
+        var (thread, isNew) = await DmService.EnsureThreadAsync(callerId, req.UserId, db);
+
+        if (isNew)
+        {
+            await hub.Clients.Group($"user-{callerId}").SendAsync("DmThreadCreated", new { threadId = thread.Id.ToString() });
+            await hub.Clients.Group($"user-{req.UserId}").SendAsync("DmThreadCreated", new { threadId = thread.Id.ToString() });
+        }
 
         var presence = await db.UserPresences
             .Where(p => p.UserId == req.UserId)
