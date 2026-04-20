@@ -41,6 +41,9 @@ public sealed class PresenceService
     {
         var presence = await db.UserPresences.FindAsync(userId);
         if (presence is null) return false;
+        // Reload bypasses EF's first-level identity cache so we see the status written
+        // by the AFK sweeper (which runs in a separate DI scope / DbContext).
+        await db.Entry(presence).ReloadAsync();
         var wasAfk = presence.Status == "afk";
         if (wasAfk) presence.Status = "online";
         presence.LastHeartbeatAt = DateTime.UtcNow;

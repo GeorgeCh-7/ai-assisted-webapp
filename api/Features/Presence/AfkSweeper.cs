@@ -39,14 +39,27 @@ public sealed class AfkSweeper : BackgroundService
         {
             presence.Status = "afk";
 
+            var payload = new { userId = presence.UserId.ToString(), status = "afk" };
+
+            // Broadcast to all rooms the user belongs to
             var roomIds = await db.RoomMemberships
                 .Where(m => m.UserId == presence.UserId)
                 .Select(m => m.RoomId)
                 .ToListAsync(ct);
 
-            var payload = new { userId = presence.UserId.ToString(), status = "afk" };
             foreach (var roomId in roomIds)
                 await _hub.Clients.Group($"room-{roomId}")
+                    .SendAsync("PresenceChanged", payload, ct);
+
+            // Also notify friends via their personal group (covers DM pages and /friends)
+            var friendIds = await db.Friendships
+                .Where(f => (f.UserAId == presence.UserId || f.UserBId == presence.UserId)
+                            && f.Status == "accepted")
+                .Select(f => f.UserAId == presence.UserId ? f.UserBId : f.UserAId)
+                .ToListAsync(ct);
+
+            foreach (var friendId in friendIds)
+                await _hub.Clients.Group($"user-{friendId}")
                     .SendAsync("PresenceChanged", payload, ct);
         }
 

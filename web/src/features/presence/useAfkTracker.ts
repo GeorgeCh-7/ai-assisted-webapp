@@ -24,10 +24,19 @@ export function useAfkTracker() {
       try { channel?.postMessage(null) } catch {}
     }
 
-    // Test hook: window.__freezeIdle() → stops heartbeats immediately (simulates AFK idle)
+    // Test hooks (DEV only):
+    //   __freezeIdle()    → stops heartbeats immediately (simulates 5-min idle)
+    //   __markActive()    → resets idle clock (simulates user interaction)
+    //   __sendHeartbeat() → fires a heartbeat immediately (bypasses 15 s interval wait)
     if (import.meta.env.DEV) {
       ;(window as Record<string, unknown>)['__freezeIdle'] = () => { lastInteractionRef.current = 0 }
       ;(window as Record<string, unknown>)['__markActive'] = markActive
+      // Returns a Promise so tests can await and detect silent invoke failures
+      ;(window as Record<string, unknown>)['__sendHeartbeat'] = () => {
+        if (!hub) return Promise.reject(new Error('hub is null'))
+        return hub.invoke('Heartbeat')
+      }
+      ;(window as Record<string, unknown>)['__hubState'] = () => hub?.state ?? 'null'
     }
 
     // Covers typing, clicking, scrolling (reading), touch, tab focus, and navigation
@@ -41,7 +50,7 @@ export function useAfkTracker() {
       if (!hub) return
       if (document.visibilityState !== 'visible') return
       if (Date.now() - lastInteractionRef.current > IDLE_THRESHOLD_MS) return
-      hub.invoke('Heartbeat', {}).catch(() => {})
+      hub.invoke('Heartbeat').catch(() => {})
     }, HEARTBEAT_MS)
 
     return () => {

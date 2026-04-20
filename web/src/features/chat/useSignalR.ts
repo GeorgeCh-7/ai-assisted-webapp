@@ -178,7 +178,7 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
         // staleTime=60s would otherwise serve the cached (stale) page.
         qc.invalidateQueries({ queryKey: ['messages', roomId] })
         // Immediately heartbeat so AFK users snap back to online without waiting for the 15s timer
-        hub.invoke('Heartbeat', {}).catch(() => {})
+        hub.invoke('Heartbeat').catch(() => {})
       })
       .catch(() => {})
 
