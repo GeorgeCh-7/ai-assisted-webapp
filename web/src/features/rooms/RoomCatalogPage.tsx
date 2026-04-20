@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Search, Users, Plus } from 'lucide-react'
+import { Search, Users, Plus, Ban } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -216,6 +216,11 @@ const RoomRow = ({ room }: RoomRowProps) => {
               </Button>
             )}
           </>
+        ) : room.isBanned ? (
+          <span className="flex items-center gap-1 text-[11px] font-mono text-destructive/70">
+            <Ban className="h-3 w-3" />
+            banned
+          </span>
         ) : (
           <Button
             variant="outline"

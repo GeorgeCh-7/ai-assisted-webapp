@@ -1,4 +1,5 @@
 import { Link, useParams } from 'react-router-dom'
+import { Lock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import PresenceIndicator from '@/features/presence/PresenceIndicator'
 import { useDmList } from './useDms'
@@ -26,10 +27,8 @@ export default function DmListSidebar() {
             }`}
           >
             <PresenceIndicator userId={t.otherUser.userId} />
-            <span className="flex-1 truncate">
-              {t.otherUser.username}
-              {isFrozen && <span className="ml-1 text-[9px] text-muted-foreground/50">frozen</span>}
-            </span>
+            <span className="flex-1 truncate">{t.otherUser.username}</span>
+            {isFrozen && <Lock className="h-3 w-3 shrink-0 text-muted-foreground/50" title="Conversation frozen" />}
             {t.unreadCount > 0 && (
               <Badge className="h-3.5 min-w-3.5 px-1 text-[9px] font-mono bg-sky-500 hover:bg-sky-500 text-white">
                 {t.unreadCount > 99 ? '99+' : t.unreadCount}

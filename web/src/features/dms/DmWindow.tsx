@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Wifi, WifiOff, Lock } from 'lucide-react'
 import { useMe } from '@/features/auth/useAuth'
@@ -7,6 +8,7 @@ import MessageComposer from '@/features/chat/MessageComposer'
 import type { MessageDto, OptimisticMessage } from '@/features/chat/types'
 import { useDmMessageHistory, useDmThread, useSendDmMessage } from './useDms'
 import { useDmSignalR } from './useDmSignalR'
+import { useHeartbeat } from '@/hooks/useHeartbeat'
 import type { DmMessageDto, OptimisticDmMessage } from './types'
 
 type ReplyCtx = { messageId: string; username: string; content: string }
@@ -26,6 +28,17 @@ export default function DmWindow() {
 
   const { hub, connected } = useDmSignalR(threadId)
   const { data: thread } = useDmThread(threadId)
+  const qc = useQueryClient()
+
+  useHeartbeat(hub)
+
+  // Clear unread badge when thread opens — JoinDm zeroes DB count server-side;
+  // invalidate once so sidebar reflects it, decoupled from the SignalR call chain.
+  useEffect(() => {
+    if (!threadId) return
+    const t = setTimeout(() => qc.invalidateQueries({ queryKey: ['dms'] }), 600)
+    return () => clearTimeout(t)
+  }, [threadId, qc])
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
     useDmMessageHistory(threadId)

@@ -32,6 +32,7 @@ export default function MessageEditMenu({
   onDelete,
 }: Props) {
   const [open, setOpen] = useState(false)
+  const [suppressFocusReturn, setSuppressFocusReturn] = useState(false)
 
   const isAuthor = authorId === meId
   const canEdit = isAuthor && !deletedAt
@@ -53,11 +54,15 @@ export default function MessageEditMenu({
           <MoreHorizontal className="h-3.5 w-3.5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-36">
+      <DropdownMenuContent
+        align="end"
+        className="w-36"
+        onCloseAutoFocus={e => { if (suppressFocusReturn) { e.preventDefault(); setSuppressFocusReturn(false) } }}
+      >
         {canReply && (
           <DropdownMenuItem
             className="gap-2 text-xs font-mono"
-            onClick={() => { onReply(); setOpen(false) }}
+            onClick={() => { setSuppressFocusReturn(true); onReply(); setOpen(false) }}
           >
             <Reply className="h-3.5 w-3.5" />
             Reply

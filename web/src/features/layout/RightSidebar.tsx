@@ -11,7 +11,7 @@ export default function RightSidebar() {
   const myRooms = (data?.pages.flatMap(p => p.items) ?? []).filter(r => r.isMember)
 
   return (
-    <div className="w-52 border-l bg-muted flex flex-col shrink-0 overflow-y-auto">
+    <div className="w-52 border-l bg-muted flex flex-col shrink-0 overflow-y-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border">
       <div className="px-2 py-2 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60">
         My Rooms
       </div>

@@ -218,7 +218,9 @@ public class ChatHub : Hub
         using (LogContext.PushProperty("SignalRConnectionId", Context.ConnectionId))
         using (LogContext.PushProperty("UserId", Context.UserIdentifier))
         {
-            await _presence.UpdateHeartbeatAsync(GetUserId(), _db);
+            var cameBack = await _presence.UpdateHeartbeatAsync(GetUserId(), _db);
+            if (cameBack)
+                await BroadcastPresenceToRoomsAsync(GetUserId(), "online");
         }
     }
 
@@ -426,6 +428,17 @@ public class ChatHub : Hub
 
             return new { currentWatermark = thread.CurrentWatermark };
         }
+    }
+
+    public async Task MarkDmRead(JoinDmArgs args)
+    {
+        var userId = GetUserId();
+        var thread = await _db.DmThreads.FindAsync(args.ThreadId);
+        if (thread is null) return;
+        if (thread.UserAId != userId && thread.UserBId != userId) return;
+        await _db.DmUnreads
+            .Where(u => u.UserId == userId && u.DmThreadId == args.ThreadId)
+            .ExecuteUpdateAsync(u => u.SetProperty(p => p.Count, 0));
     }
 
     public async Task LeaveDm(LeaveDmArgs args)

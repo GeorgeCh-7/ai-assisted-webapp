@@ -86,7 +86,12 @@ export function useDmSignalR(threadId: string) {
     hub.on('UserBanned', handleUserBanned)
     hub.on('Error', handleError)
 
-    hub.invoke('JoinDm', { threadId }).catch(() => {})
+    hub.invoke('JoinDm', { threadId })
+      .then(() => {
+        // Force fresh fetch so messages sent while we were elsewhere aren't hidden by staleTime.
+        qc.invalidateQueries({ queryKey: ['dm-messages', threadId] })
+      })
+      .catch(() => {})
 
     return () => {
       hub.off('DirectMessageReceived', handleDirectMessage)

@@ -81,6 +81,7 @@ public static class RoomsEndpoints
                 r.IsPrivate,
                 MemberCount = r.Memberships.Count(),
                 MyMembership = r.Memberships.FirstOrDefault(m => m.UserId == callerId),
+                IsBanned = db.RoomBans.Any(b => b.RoomId == r.Id && b.BannedUserId == callerId),
             })
             .ToListAsync();
 
@@ -98,7 +99,8 @@ public static class RoomsEndpoints
             r.MemberCount,
             r.MyMembership is not null,
             r.IsPrivate,
-            r.MyMembership?.Role));
+            r.MyMembership?.Role,
+            r.IsBanned));
 
         return Results.Ok(new PagedResponse<RoomResponse>(items, nextCursor));
     }

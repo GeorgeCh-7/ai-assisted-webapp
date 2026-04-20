@@ -59,7 +59,9 @@ export function useGlobalHubEvents() {
         incrementUnread(qc, roomId)
       }
     }
-    const handleDmUnreadUpdated = () => {
+    const handleDmUnreadUpdated = (payload: unknown) => {
+      const { threadId } = payload as { threadId: string }
+      if (location.pathname.includes(threadId)) return
       qc.invalidateQueries({ queryKey: ['dms'] })
     }
 

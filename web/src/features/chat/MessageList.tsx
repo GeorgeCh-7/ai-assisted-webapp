@@ -171,7 +171,7 @@ export default function MessageList({
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto min-h-0 flex flex-col"
+      className="flex-1 overflow-y-auto min-h-0 flex flex-col [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border"
       style={{ overflowAnchor: 'none' }}
     >
       <div ref={sentinelRef} className="h-px shrink-0" />

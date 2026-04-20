@@ -9,6 +9,7 @@ public record RoomResponse(
     int MemberCount,
     bool IsMember,
     bool IsPrivate,
-    string? MyRole);
+    string? MyRole,
+    bool IsBanned = false);
 
 public record PagedResponse<T>(IEnumerable<T> Items, string? NextCursor);

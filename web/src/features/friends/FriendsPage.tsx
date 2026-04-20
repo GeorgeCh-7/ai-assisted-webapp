@@ -160,9 +160,10 @@ export default function FriendsPage() {
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="h-7 w-7 text-muted-foreground hover:text-amber-600 hover:bg-amber-500/10"
+                    className={`h-7 w-7 ${f.isBanned ? 'text-amber-500 hover:text-amber-400 hover:bg-amber-500/10' : 'text-muted-foreground hover:text-amber-600 hover:bg-amber-500/10'}`}
                     onClick={() => f.isBanned ? unban(f.userId) : ban(f.userId)}
                     aria-label={f.isBanned ? 'Unblock' : 'Block'}
+                    title={f.isBanned ? 'Unblock user' : 'Block user'}
                   >
                     <Ban className="h-3.5 w-3.5" />
                   </Button>

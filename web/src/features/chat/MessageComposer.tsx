@@ -48,6 +48,16 @@ export default function MessageComposer({
     }
   }, [editCtx?.messageId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Autofocus when reply context is set — double-RAF ensures banner has rendered before we focus
+  useEffect(() => {
+    if (!replyCtx) return
+    let raf2: number
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => textareaRef.current?.focus())
+    })
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2) }
+  }, [replyCtx?.messageId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const byteLength = new TextEncoder().encode(content).length
   const overLimit = byteLength > MAX_BYTES
   const showCounter = byteLength > MAX_BYTES * 0.75
@@ -159,7 +169,7 @@ export default function MessageComposer({
           <div className="relative flex-1">
             <textarea
               ref={textareaRef}
-              className={`w-full resize-none rounded-md border bg-muted/30 px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 ${
+              className={`w-full resize-none rounded-md border bg-muted/30 px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border ${
                 overLimit ? 'border-destructive focus:ring-destructive' : isEditing ? 'border-amber-400/60' : 'border-input'
               }`}
               placeholder={

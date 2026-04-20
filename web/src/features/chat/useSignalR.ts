@@ -7,6 +7,7 @@ import { incrementUnread } from '@/hooks/useUnread'
 import { useHubContext } from './HubProvider'
 import type { HubLike } from '@/lib/hub'
 import type { MessageDto, PagedMessagesResponse } from './types'
+import type { PresenceStatus } from '@/features/presence/usePresence'
 
 export type { HubLike, ConnectionState } from '@/lib/hub'
 
@@ -148,12 +149,17 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
       }
     }
 
-    const handleUserJoined = (_payload: unknown) => {
-      // UserJoinedRoom fires on SignalR group join (window open), not membership change.
+    const handleUserJoined = (payload: unknown) => {
+      const { userId } = payload as { userId: string }
+      // User just opened the room — they're definitely active, mark online immediately
+      qc.setQueryData<PresenceStatus>(['presence', userId], 'online')
+      qc.invalidateQueries({ queryKey: ['room-members', roomId] })
+      qc.invalidateQueries({ queryKey: ['room', roomId] })
     }
 
     const handleUserLeft = (_payload: unknown) => {
-      // Same — window close, not membership change.
+      qc.invalidateQueries({ queryKey: ['room-members', roomId] })
+      qc.invalidateQueries({ queryKey: ['room', roomId] })
     }
 
     hub.on('MessageReceived', handleMessage)
@@ -168,6 +174,11 @@ export function useSignalR(roomId: string, options: UseSignalROptions = {}) {
     hub.invoke<{ currentWatermark: number } | null>('JoinRoom', { roomId })
       .then(result => {
         if (result) lastSeenWatermarkRef.current = Math.max(lastSeenWatermarkRef.current, 0)
+        // Force fresh fetch so messages sent while we were in another room are visible immediately.
+        // staleTime=60s would otherwise serve the cached (stale) page.
+        qc.invalidateQueries({ queryKey: ['messages', roomId] })
+        // Immediately heartbeat so AFK users snap back to online without waiting for the 15s timer
+        hub.invoke('Heartbeat', {}).catch(() => {})
       })
       .catch(() => {})
 

@@ -36,12 +36,16 @@ public sealed class PresenceService
         return true;
     }
 
-    public async Task UpdateHeartbeatAsync(Guid userId, AppDbContext db)
+    // Returns true if the user transitioned afk→online (caller should broadcast PresenceChanged).
+    public async Task<bool> UpdateHeartbeatAsync(Guid userId, AppDbContext db)
     {
         var presence = await db.UserPresences.FindAsync(userId);
-        if (presence is null) return;
+        if (presence is null) return false;
+        var wasAfk = presence.Status == "afk";
+        if (wasAfk) presence.Status = "online";
         presence.LastHeartbeatAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
+        return wasAfk;
     }
 
     private static async Task UpsertStatusAsync(Guid userId, string status, AppDbContext db)

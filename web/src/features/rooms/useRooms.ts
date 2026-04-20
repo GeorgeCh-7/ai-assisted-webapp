@@ -75,6 +75,9 @@ export function useRoomMembers(roomId: string) {
   useEffect(() => {
     if (!members) return
     for (const m of members) {
+      // Don't downgrade online→afk: a heartbeat recovery may have already updated the cache
+      const current = qc.getQueryData<PresenceStatus>(['presence', m.userId])
+      if (current === 'online' && m.presence === 'afk') continue
       qc.setQueryData<PresenceStatus>(['presence', m.userId], m.presence)
     }
   }, [members, qc])

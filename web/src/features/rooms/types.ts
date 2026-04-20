@@ -8,6 +8,7 @@ export type RoomDto = {
   isMember: boolean
   isPrivate: boolean
   myRole: RoomRole | null
+  isBanned: boolean
 }
 
 export type PagedRoomsResponse = {
