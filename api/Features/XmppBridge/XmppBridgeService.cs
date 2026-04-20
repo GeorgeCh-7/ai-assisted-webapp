@@ -50,8 +50,9 @@ public sealed class XmppBridgeService : BackgroundService
     {
         if (_cfg.GetValue<bool>("Xmpp:Enabled") is false) return;
 
-        // Give ejabberd time to finish startup and for the setup container to register accounts
-        await Task.Delay(TimeSpan.FromSeconds(20), ct);
+        // Give ejabberd time to finish startup and for ejabberd-setup to register accounts.
+        // ejabberd healthcheck allows up to ~3 min; 60s covers typical fast startups.
+        await Task.Delay(TimeSpan.FromSeconds(60), ct);
 
         while (!ct.IsCancellationRequested)
         {
@@ -139,7 +140,7 @@ public sealed class XmppBridgeService : BackgroundService
         if (!authResp.Contains("success"))
         {
             _log.LogError("XMPP auth failed: {resp}", authResp);
-            return;
+            throw new InvalidOperationException("XMPP auth failed — account not registered yet or wrong password");
         }
 
         // --- 4. Re-open stream after auth ---
