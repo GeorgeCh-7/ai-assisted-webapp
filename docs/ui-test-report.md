@@ -50,6 +50,80 @@
 | TanStack devtools visible during demo | Gated behind `VITE_SHOW_DEVTOOLS=true` env var | `1c063c7` |
 | BUG-02 code not committed | `useRoomMembers` hook + `ChatWindow.tsx` call were implemented but not staged; committed | `701fccd` |
 
+## AFK / Presence Comprehensive Suite (2026-04-20, post-fix)
+
+**File:** `e2e/tests/presence-comprehensive.spec.ts` + `e2e/tests/afk-presence.spec.ts`  
+**Run time:** ~3 min (17 tests, 1 worker)  
+**Result:** 17/17 passed  
+**Commit:** `b48dbbe`
+
+Root cause resolved: `hub.invoke('Heartbeat', {})` was passing an unwanted `{}` argument to a zero-parameter .NET 9 SignalR method. The server rejected at binding time; `.catch(() => {})` silently swallowed the error. Heartbeats had never worked. Fixed across three call sites; `__sendHeartbeat` dev hook now returns a Promise.
+
+| # | Scenario | Result |
+|---|---|---|
+| 1–4 | Presence indicators update on connect/disconnect/AFK/recover | ✅ Pass |
+| 5–8 | Multi-tab: online only after all tabs close; AFK propagates | ✅ Pass |
+| 9–12 | AFK after freeze idle; recover via heartbeat; room + DM propagation | ✅ Pass |
+| 13–17 | AFK smoke suite (separate file) | ✅ Pass |
+
+## Attachment E2E Suite (2026-04-20)
+
+**File:** `e2e/tests/attachments.spec.ts`  
+**Run time:** ~45s (10 tests, 1 worker)  
+**Result:** 10/10 passed  
+**Commit:** `b48dbbe`
+
+| # | Scenario | Result |
+|---|---|---|
+| 1 | Paperclip button visible in room composer | ✅ Pass |
+| 2 | Selecting file shows pending chip with filename | ✅ Pass |
+| 3 | X button removes pending chip | ✅ Pass |
+| 4 | File-only send (no text) enables send; chip clears after | ✅ Pass |
+| 5 | Multiple files can be queued | ✅ Pass |
+| 6 | Paperclip hidden in edit mode | ✅ Pass |
+| 7 | API upload returns 201 with file metadata | ✅ Pass |
+| 8 | File > 20 MB rejected with 413 | ✅ Pass |
+| 9 | Attach chip flow works in DM composer | ✅ Pass |
+| 10 | Uploaded file accessible by room member; denied to non-member | ✅ Pass |
+
+## Room Management E2E Suite (2026-04-20)
+
+**File:** `e2e/tests/room-management.spec.ts`  
+**Run time:** ~25s (9 tests, 1 worker)  
+**Result:** 9/9 passed  
+**Commit:** `b48dbbe`
+
+| # | Scenario | Result |
+|---|---|---|
+| 1 | Settings modal opens with Members / Admins / Banned / Settings tabs | ✅ Pass |
+| 2 | Owner bans member from Members tab; member disappears | ✅ Pass |
+| 3 | Banned member visible in Banned tab; unban removes them | ✅ Pass |
+| 4 | Owner promotes member to admin; demote button appears | ✅ Pass |
+| 5 | Owner demotes admin back to member | ✅ Pass |
+| 6 | Banned member cannot rejoin room (API 403) | ✅ Pass |
+| 7 | Settings tab shows room name and Delete Room button for owner | ✅ Pass |
+| 8 | Catalog search narrows results in real time | ✅ Pass |
+| 9 | Private room not visible in catalog to non-invited users | ✅ Pass |
+
+## Messaging Features E2E Suite (2026-04-20)
+
+**File:** `e2e/tests/messaging-features.spec.ts`  
+**Run time:** ~23s (7 tests, 1 worker)  
+**Result:** 7/7 passed  
+**Commit:** `b48dbbe`
+
+| # | Scenario | Result |
+|---|---|---|
+| 1 | Reply in room: banner shows "Replying to {user}"; cancel clears it | ✅ Pass |
+| 2 | Reply in room: sent reply renders quote block with original text | ✅ Pass |
+| 3 | Edit room message: indicator shows; content updates on save | ✅ Pass |
+| 4 | Edit cancel via Escape: original text preserved | ✅ Pass |
+| 5 | Reply in DM: banner shows; cancel clears it | ✅ Pass |
+| 6 | Reply in DM: sent reply renders quote block | ✅ Pass |
+| 7 | Edit DM message: indicator shows; content updates on save | ✅ Pass |
+
+---
+
 ## Presence + Notification E2E Suite (2026-04-20)
 
 **File:** `e2e/tests/presence-notifications.spec.ts`  

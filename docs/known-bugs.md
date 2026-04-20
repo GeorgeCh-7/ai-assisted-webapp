@@ -20,6 +20,12 @@
 - **BUG-05** (public room invitation error message confusing) — changed to "Invitations are only valid for private rooms" in `RoomInvitationEndpoints.cs`.
 - **BUG-06** (PresenceIndicator not queryable by automated tests) — added `data-presence={status}` attribute to the indicator span.
 
+## Resolved in E2E expansion (2026-04-20)
+
+- **AFK heartbeat silently failing** — All `hub.invoke('Heartbeat', {})` call sites were passing `{}` as a positional argument to a zero-parameter .NET 9 SignalR method. The server rejected the call at the argument-binding stage (before the method body ran), returning a hub exception that `.catch(() => {})` swallowed everywhere. Heartbeats never worked from day one. Fixed by removing the `{}` argument at all three call sites (`useAfkTracker.ts`, `useSignalR.ts`, `useHeartbeat.ts`). `__sendHeartbeat` dev hook now returns a Promise so tests can detect silent invocation failures.
+- **AFK detection (server)** — `LastHeartbeatAt` was only set at connect time via `ConnectAsync → UpsertStatusAsync`; `UpdateHeartbeatAsync` read a stale EF identity-cache copy. Fixed by calling `ReloadAsync()` before the timestamp check.
+- **AfkSweeper friend-group broadcast missing** — AFK events were only broadcast to `room-{roomId}` groups; DM/friends pages never received them. Fixed by also broadcasting to `user-{friendId}` groups.
+
 ## Resolved post-sweep (2026-04-20)
 
 - **Room/DM unread badges not updating in real-time** — `RoomUnreadUpdated` and `DmUnreadUpdated` SignalR events added. Server broadcasts to each member's `user-{id}` group after incrementing the DB counter; `useGlobalHubEvents` handles both events to call `incrementUnread` and invalidate `['dms']` respectively. Verified by `presence-notifications.spec.ts` tests 8 and 9.
