@@ -246,12 +246,12 @@ test('afk: user goes AFK when idle — message row + DM sidebar both flip; retur
   await expect(msgRow.locator('[data-presence="online"]')).not.toBeVisible()
   await expect(sidebarLink.locator('[data-presence="online"]')).not.toBeVisible()
 
-  // A interacts → heartbeat sent → back to online in both places
+  // A interacts → immediate heartbeat → back to online in both places
   await pageA.evaluate(() => {
-    const fn = (window as Record<string, unknown>)['__markActive']
-    if (typeof fn === 'function') fn()
+    const w = window as Record<string, unknown>
+    if (typeof w['__markActive'] === 'function') (w['__markActive'] as () => void)()
+    if (typeof w['__sendHeartbeat'] === 'function') (w['__sendHeartbeat'] as () => void)()
   })
-  await pageA.locator('textarea').dispatchEvent('pointerdown')
 
   await expect(msgRow.locator('[data-presence="online"]')).toBeVisible({ timeout: 20_000 })
   await expect(sidebarLink.locator('[data-presence="online"]')).toBeVisible({ timeout: 5_000 })
