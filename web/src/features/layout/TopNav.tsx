@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Bell, LogOut, User, Lock, Trash2 } from 'lucide-react'
+import { Bell, LogOut, UserCircle, Lock, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -13,6 +13,22 @@ import { useMe, useLogout } from '@/features/auth/useAuth'
 import { useInvitations, useAcceptInvitation, useDeclineInvitation } from '@/features/rooms/useRoomInvitations'
 import { useAfkTracker } from '@/features/presence/useAfkTracker'
 import DeleteAccountDialog from '@/features/auth/DeleteAccountDialog'
+
+const API_URL = import.meta.env.VITE_API_URL as string
+
+function NavAvatar({ avatarUrl, username }: { avatarUrl: string | null; username: string }) {
+  const src = avatarUrl
+    ? `${API_URL}${avatarUrl}`
+    : `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(username)}`
+  return (
+    <img
+      src={src}
+      alt={username}
+      className="h-4 w-4 rounded-full object-cover shrink-0"
+      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+    />
+  )
+}
 
 export default function TopNav() {
   const { data: me } = useMe()
@@ -117,11 +133,17 @@ export default function TopNav() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="h-7 px-2 text-xs font-mono gap-1.5">
-            <User className="h-3 w-3" />
+            <NavAvatar avatarUrl={me?.avatarUrl ?? null} username={me?.username ?? ''} />
             {me?.username ?? '…'}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            <Link to="/profile" className="gap-2">
+              <UserCircle className="h-3.5 w-3.5" />
+              Profile &amp; avatar
+            </Link>
+          </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link to="/auth/change-password" className="gap-2">
               <Lock className="h-3.5 w-3.5" />

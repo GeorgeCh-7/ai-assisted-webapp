@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Reply } from 'lucide-react'
 import PresenceIndicator from '@/features/presence/PresenceIndicator'
 import MessageEditMenu from './MessageEditMenu'
@@ -44,6 +44,48 @@ function avatarColor(username: string): string {
   let h = 0
   for (let i = 0; i < username.length; i++) h = (h * 31 + username.charCodeAt(i)) | 0
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
+
+function dicebearUrl(displayName: string): string {
+  return `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}`
+}
+
+const API_URL = import.meta.env.VITE_API_URL as string
+
+function Avatar({ authorId, username, isDeleted }: { authorId: string | null; username: string; isDeleted: boolean }) {
+  const displayName = username.startsWith('xmpp:') ? username.slice(5) : username
+  const customSrc = authorId ? `${API_URL}/api/users/${authorId}/avatar` : null
+  const [src, setSrc] = useState<string>(customSrc ?? dicebearUrl(displayName))
+  const [useFallbackCircle, setUseFallbackCircle] = useState(false)
+
+  const handleError = () => {
+    if (customSrc && src === customSrc) {
+      setSrc(dicebearUrl(displayName))
+    } else {
+      setUseFallbackCircle(true)
+    }
+  }
+
+  if (useFallbackCircle) {
+    return (
+      <div
+        className={`mb-0.5 h-7 w-7 shrink-0 rounded-full text-[11px] font-bold text-white flex items-center justify-center select-none ${
+          isDeleted ? 'bg-muted-foreground/30' : avatarColor(username)
+        }`}
+      >
+        {displayName[0].toUpperCase()}
+      </div>
+    )
+  }
+
+  return (
+    <img
+      src={src}
+      alt={displayName}
+      className={`mb-0.5 h-7 w-7 shrink-0 rounded-full object-cover select-none ${isDeleted ? 'opacity-30' : ''}`}
+      onError={handleError}
+    />
+  )
 }
 
 function formatTime(iso: string): string {
@@ -197,15 +239,7 @@ const MessageRow = ({ msg, meId, myRole, replyToMsg, onReply, onEditStart, onDel
     >
       {/* Avatar — others only */}
       {!isMe && (
-        <div
-          className={`mb-0.5 h-7 w-7 shrink-0 rounded-full text-[11px] font-bold text-white flex items-center justify-center select-none ${
-            isDeleted ? 'bg-muted-foreground/30' : avatarColor(msg.authorUsername)
-          }`}
-        >
-          {(msg.authorUsername.startsWith('xmpp:')
-            ? msg.authorUsername.slice(5)
-            : msg.authorUsername)[0].toUpperCase()}
-        </div>
+        <Avatar authorId={msg.authorId} username={msg.authorUsername} isDeleted={isDeleted} />
       )}
 
       {/* Bubble column */}
