@@ -165,7 +165,7 @@ export default function MessageComposer({
 
       <div className="px-3 py-2">
         {/* Single bordered container — textarea + action icons inside, like Teams */}
-        <div className={`flex items-end rounded-md border bg-muted/30 focus-within:ring-1 focus-within:ring-ring ${
+        <div className={`flex items-center rounded-md border bg-muted/30 focus-within:ring-1 focus-within:ring-ring ${
           overLimit ? 'border-destructive focus-within:ring-destructive' : isEditing ? 'border-amber-400/60' : 'border-input'
         }`}>
           <div className="relative flex-1">
