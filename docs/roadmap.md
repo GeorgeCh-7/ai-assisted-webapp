@@ -59,7 +59,7 @@
 - Private-room-catalog leak fix (known-bugs.md Bug 1).
 - UI polish pass along the demo path.
 - Written demo script (`docs/demo-script.md`) rehearsed end-to-end in under 6 minutes.
-- **(P2, shipped — option d)** Minimal XMPP via embedded ejabberd + one-way bridge. ejabberd runs in docker-compose on port 5222. A .NET `BackgroundService` (`XmppBridgeService`) connects as `bridge-bot@chat.local`, joins `bridge@conference.chat.local` MUC, and forwards incoming groupchat messages into the app's `general` room. Messages from XMPP users carry a "via Jabber" badge in the UI. Gajim accounts: `gajim-user-a` / `gajim-user-b` @ `chat.local:5222`, password `Test123!`.
+- **(P2, shipped — option d, bidirectional)** Minimal XMPP via embedded ejabberd + bidirectional bridge. ejabberd runs in docker-compose on port 5222. A .NET `BackgroundService` (`XmppBridgeService`) connects as `bridge-bot@chat.local`, joins `bridge@conference.chat.local` MUC, and forwards incoming groupchat messages into the app's `general` room. Messages from XMPP users carry a "via Jabber" badge in the UI. Gajim accounts: `gajim-user-a` / `gajim-user-b` @ `chat.local:5222`, password `Test123!`.
 
 ### Explicitly cut from the original Phase 3 brief
 

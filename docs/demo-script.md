@@ -95,11 +95,12 @@
 1. Open Gajim. Show the MUC `bridge@conference.chat.local` — both gajim-user-a and gajim-user-b are members. The `bridge-bot` presence is also visible (that's our .NET bridge).
 2. `gajim-user-a` types a message and sends it in the MUC.
 3. **Alice's `#general` room shows the message within ~2s, badged "via Jabber".** The author shows as `gajim-user-a` (the `xmpp:` prefix is stripped in the UI).
-4. Repeat with `gajim-user-b` — two different Jabber identities, both bridged.
+4. **Alice replies in-app.** Within ~2s, Gajim shows `[alice]: <message>` — the bridge is **bidirectional**.
+5. Repeat with `gajim-user-b` — two different Jabber identities, both bridged in both directions.
 
 **Narration:**
-- "ejabberd runs as a separate service in the same `docker compose up`. Our .NET `XmppBridgeService` connects as `bridge-bot`, joins the MUC, and mirrors every groupchat message into the `#general` room via SignalR — so all connected clients see it in real time."
-- "Bridge is one-way for the demo (XMPP → app). Reverse direction would add ~3h — `docs/roadmap.md` notes it as a deferred stretch."
+- "ejabberd runs as a separate service in the same `docker compose up`. Our .NET `XmppBridgeService` connects as `bridge-bot`, joins the MUC, and mirrors messages in both directions — XMPP → app via SignalR, and app → XMPP via a bounded async channel so back-pressure is handled if the connection drops."
+- "App messages appear in Gajim prefixed with the sender's username: `[alice]: hello`. Jabber messages appear in the app with a 'via Jabber' badge."
 
 **Known flake:** The bridge requires the `#general` room to exist in the app before it can forward. If the room was not pre-seeded, create it during pre-flight (Act 2 step 1 creates `live-demo`; ensure `general` exists separately).
 

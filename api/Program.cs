@@ -90,7 +90,9 @@ builder.Services.AddSingleton<FileStorageService>();
 // --- Background services ---
 builder.Services.AddHostedService<AfkSweeper>();
 builder.Services.AddHostedService<OrphanFileSweeper>();
-builder.Services.AddHostedService<XmppBridgeService>();
+// Register as singleton so ChatHub can inject it directly, then host it
+builder.Services.AddSingleton<XmppBridgeService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<XmppBridgeService>());
 
 // --- Swagger ---
 builder.Services.AddEndpointsApiExplorer();

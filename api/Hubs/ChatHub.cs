@@ -3,6 +3,7 @@ using System.Text;
 using Api.Data;
 using Api.Domain;
 using Api.Features.Presence;
+using Api.Features.XmppBridge;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -16,11 +17,13 @@ public class ChatHub : Hub
 {
     private readonly AppDbContext _db;
     private readonly PresenceService _presence;
+    private readonly XmppBridgeService _xmpp;
 
-    public ChatHub(AppDbContext db, PresenceService presence)
+    public ChatHub(AppDbContext db, PresenceService presence, XmppBridgeService xmpp)
     {
         _db = db;
         _presence = presence;
+        _xmpp = xmpp;
     }
 
     public override async Task OnConnectedAsync()
@@ -188,6 +191,11 @@ public class ChatHub : Hub
 
             await Clients.Group(GroupName(args.RoomId)).SendAsync("MessageReceived", payload);
             await IncrementUnreadsAsync(args.RoomId, userId, msg.Id);
+
+            // Forward to XMPP MUC if this is the bridge room and not a bridge-sourced message
+            var senderName = author?.UserName ?? "";
+            if (_xmpp.BridgeRoomId == args.RoomId && !senderName.StartsWith("xmpp:"))
+                _xmpp.TryEnqueueOutbound(senderName, args.Content);
 
             return payload;
         }
