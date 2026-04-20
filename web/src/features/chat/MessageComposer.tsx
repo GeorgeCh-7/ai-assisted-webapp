@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { SendHorizonal, Paperclip, X } from 'lucide-react'
 import ReplyQuoteBanner from './ReplyQuoteBanner'
 import { useFileUpload } from '@/features/files/useFileUpload'
@@ -165,19 +164,44 @@ export default function MessageComposer({
       )}
 
       <div className="px-3 py-2">
-        <div className="flex items-end gap-2">
+        {/* Single bordered container — textarea + action icons inside, like Teams */}
+        <div className={`flex items-end rounded-md border bg-muted/30 focus-within:ring-1 focus-within:ring-ring ${
+          overLimit ? 'border-destructive focus-within:ring-destructive' : isEditing ? 'border-amber-400/60' : 'border-input'
+        }`}>
+          {uploadContext && !isEditing && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (file) handleFileSelected(file)
+                  e.target.value = ''
+                }}
+              />
+              <button
+                type="button"
+                className="h-9 w-9 shrink-0 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={disabled || uploading}
+                aria-label="Attach file"
+              >
+                <Paperclip className="h-4 w-4" />
+              </button>
+            </>
+          )}
+
           <div className="relative flex-1">
             <textarea
               ref={textareaRef}
-              className={`w-full resize-none rounded-md border bg-muted/30 px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border ${
-                overLimit ? 'border-destructive focus:ring-destructive' : isEditing ? 'border-amber-400/60' : 'border-input'
-              }`}
+              className="w-full resize-none bg-transparent px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none disabled:opacity-50 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border"
               placeholder={
                 isEditing
                   ? 'Edit message…'
                   : replyCtx
                   ? `Reply to ${replyCtx.username}…`
-                  : 'Type a message… (Enter to send, Shift+Enter for newline)'
+                  : 'Message…'
               }
               rows={1}
               style={{ minHeight: '2.25rem', maxHeight: '7rem' }}
@@ -195,7 +219,7 @@ export default function MessageComposer({
             />
             {showCounter && (
               <span
-                className={`absolute bottom-1.5 right-2.5 text-[10px] font-mono pointer-events-none ${
+                className={`absolute bottom-1.5 right-2 text-[10px] font-mono pointer-events-none ${
                   overLimit ? 'text-destructive' : 'text-muted-foreground'
                 }`}
               >
@@ -204,42 +228,21 @@ export default function MessageComposer({
             )}
           </div>
 
-          {uploadContext && !isEditing && (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={e => {
-                  const file = e.target.files?.[0]
-                  if (file) handleFileSelected(file)
-                  e.target.value = ''
-                }}
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={disabled || uploading}
-                aria-label="Attach file"
-              >
-                <Paperclip className="h-4 w-4" />
-              </Button>
-            </>
-          )}
-
-          <Button
+          <button
             type="button"
-            size="icon"
-            className={`h-9 w-9 shrink-0 ${isEditing ? 'bg-amber-500 hover:bg-amber-600' : ''}`}
+            className={`h-9 w-9 shrink-0 flex items-center justify-center rounded-sm m-0.5 transition-colors disabled:opacity-40 ${
+              isEditing
+                ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                : canSend
+                ? 'bg-primary hover:bg-primary/90 text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
             onClick={handleSend}
             disabled={!canSend}
             aria-label={isEditing ? 'Save edit' : 'Send message'}
           >
             <SendHorizonal className="h-4 w-4" />
-          </Button>
+          </button>
         </div>
 
         {overLimit && (

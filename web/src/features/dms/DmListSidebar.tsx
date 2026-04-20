@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Lock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { useQueryClient } from '@tanstack/react-query'
 import PresenceIndicator from '@/features/presence/PresenceIndicator'
 import { useDmList } from './useDms'
 import type { DmThreadListItem } from './types'
@@ -9,6 +11,16 @@ export default function DmListSidebar() {
   const { threadId: activeThreadId } = useParams<{ threadId?: string }>()
   const { data } = useDmList()
   const threads = data?.items ?? []
+  const qc = useQueryClient()
+
+  // Seed presence cache from DM list API so contacts show online/offline immediately
+  useEffect(() => {
+    for (const t of threads) {
+      qc.setQueryData(['presence', t.otherUser.userId], (old: unknown) =>
+        old === undefined ? t.otherUser.presence : old,
+      )
+    }
+  }, [threads, qc])
 
   if (threads.length === 0) return null
 

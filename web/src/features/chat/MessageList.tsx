@@ -26,18 +26,9 @@ type Props = {
 }
 
 const AVATAR_COLORS = [
-  'bg-rose-500',
-  'bg-orange-500',
-  'bg-amber-500',
-  'bg-lime-600',
-  'bg-emerald-500',
-  'bg-teal-500',
-  'bg-cyan-600',
-  'bg-sky-500',
-  'bg-blue-500',
-  'bg-violet-500',
-  'bg-fuchsia-500',
-  'bg-pink-500',
+  'bg-rose-500', 'bg-orange-500', 'bg-amber-500', 'bg-lime-600',
+  'bg-emerald-500', 'bg-teal-500', 'bg-cyan-600', 'bg-sky-500',
+  'bg-blue-500', 'bg-violet-500', 'bg-fuchsia-500', 'bg-pink-500',
 ] as const
 
 function avatarColor(username: string): string {
@@ -52,48 +43,56 @@ function dicebearUrl(displayName: string): string {
 
 const API_URL = import.meta.env.VITE_API_URL as string
 
-function Avatar({ authorId, username, isDeleted }: { authorId: string | null; username: string; isDeleted: boolean }) {
+function SmartAvatar({ authorId, username, isDeleted }: { authorId: string | null; username: string; isDeleted: boolean }) {
   const displayName = username.startsWith('xmpp:') ? username.slice(5) : username
   const customSrc = authorId ? `${API_URL}/api/users/${authorId}/avatar` : null
-  const [src, setSrc] = useState<string>(customSrc ?? dicebearUrl(displayName))
-  const [useFallbackCircle, setUseFallbackCircle] = useState(false)
+  const [src, setSrc] = useState(customSrc ?? dicebearUrl(displayName))
+  const [failed, setFailed] = useState(false)
 
-  const handleError = () => {
-    if (customSrc && src === customSrc) {
-      setSrc(dicebearUrl(displayName))
-    } else {
-      setUseFallbackCircle(true)
-    }
-  }
-
-  if (useFallbackCircle) {
+  if (failed) {
     return (
-      <div
-        className={`mb-0.5 h-7 w-7 shrink-0 rounded-full text-[11px] font-bold text-white flex items-center justify-center select-none ${
-          isDeleted ? 'bg-muted-foreground/30' : avatarColor(username)
-        }`}
-      >
-        {displayName[0].toUpperCase()}
+      <div className={`h-9 w-9 shrink-0 rounded-full text-[13px] font-bold text-white flex items-center justify-center select-none ${isDeleted ? 'bg-muted-foreground/30' : avatarColor(username)}`}>
+        {displayName[0]?.toUpperCase() ?? '?'}
       </div>
     )
   }
-
   return (
     <img
       src={src}
       alt={displayName}
-      className={`mb-0.5 h-7 w-7 shrink-0 rounded-full object-cover select-none ${isDeleted ? 'opacity-30' : ''}`}
-      onError={handleError}
+      className={`h-9 w-9 rounded-full object-cover select-none shrink-0 ${isDeleted ? 'opacity-30' : ''}`}
+      onError={() => {
+        if (customSrc && src === customSrc) setSrc(dicebearUrl(displayName))
+        else setFailed(true)
+      }}
     />
   )
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+function formatDateHeader(iso: string): string {
+  const d = new Date(iso)
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+
+  if (d.toDateString() === today.toDateString()) return 'Today'
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
+  return d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })
+}
+
+// Break into a new group if: different author, reply message, or >7 min gap
+function shouldBreakGroup(
+  prev: MessageDto | OptimisticMessage,
+  curr: MessageDto | OptimisticMessage,
+): boolean {
+  if (prev.authorId !== curr.authorId) return true
+  if (curr.replyToMessageId) return true
+  const gap = new Date(curr.sentAt).getTime() - new Date(prev.sentAt).getTime()
+  return gap > 7 * 60 * 1000
 }
 
 export default function MessageList({
@@ -125,7 +124,6 @@ export default function MessageList({
     const last = messages[messages.length - 1]
     if (!last || last.id === prevLastId.current) return
     prevLastId.current = last.id
-
     const el = containerRef.current
     if (!el) return
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 180
@@ -136,26 +134,19 @@ export default function MessageList({
     const el = containerRef.current
     if (!el || isFetchingNextPage) return
     const delta = el.scrollHeight - prevScrollHeightRef.current
-    if (delta > 0 && prevScrollHeightRef.current > 0) {
-      el.scrollTop += delta
-    }
+    if (delta > 0 && prevScrollHeightRef.current > 0) el.scrollTop += delta
     prevScrollHeightRef.current = el.scrollHeight
   })
-
-  const handleFetchMore = () => {
-    const el = containerRef.current
-    if (el) prevScrollHeightRef.current = el.scrollHeight
-    fetchNextPage()
-  }
 
   useEffect(() => {
     const sentinel = sentinelRef.current
     if (!sentinel) return
-
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) {
-          handleFetchMore()
+          const el = containerRef.current
+          if (el) prevScrollHeightRef.current = el.scrollHeight
+          fetchNextPage()
         }
       },
       { threshold: 0 },
@@ -165,8 +156,20 @@ export default function MessageList({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasNextPage, isFetchingNextPage])
 
-  // Build a lookup for reply-to message content (for quote block rendering)
   const messageIndex = new Map(messages.map(m => [m.id, m]))
+
+  // Determine which messages are first in their group
+  const isFirstInGroup = new Set<string>()
+  for (let i = 0; i < messages.length; i++) {
+    const prev = messages[i - 1]
+    const curr = messages[i]
+    if (!prev || shouldBreakGroup(prev, curr)) {
+      isFirstInGroup.add(curr.id)
+    }
+  }
+
+  // Date separator tracking
+  const shownDates = new Set<string>()
 
   return (
     <div
@@ -184,30 +187,44 @@ export default function MessageList({
 
       {isLoading ? (
         <div className="flex-1 flex items-center justify-center">
-          <span className="text-xs font-mono text-muted-foreground animate-pulse">
-            loading…
-          </span>
+          <span className="text-xs font-mono text-muted-foreground animate-pulse">loading…</span>
         </div>
       ) : messages.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
-          <span className="text-xs text-muted-foreground">
-            No messages yet. Say hello!
-          </span>
+          <span className="text-xs text-muted-foreground">No messages yet. Say hello!</span>
         </div>
       ) : (
-        <div className="py-1">
-          {messages.map(msg => (
-            <MessageRow
-              key={msg.id}
-              msg={msg}
-              meId={meId}
-              myRole={myRole ?? null}
-              replyToMsg={msg.replyToMessageId ? messageIndex.get(msg.replyToMessageId) : undefined}
-              onReply={onReply}
-              onEditStart={onEditStart}
-              onDelete={onDelete}
-            />
-          ))}
+        <div className="py-2">
+          {messages.map(msg => {
+            const dateKey = new Date(msg.sentAt).toDateString()
+            const showDate = !shownDates.has(dateKey)
+            if (showDate) shownDates.add(dateKey)
+            const first = isFirstInGroup.has(msg.id)
+
+            return (
+              <div key={msg.id}>
+                {showDate && (
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-[11px] font-mono text-muted-foreground/60 shrink-0">
+                      {formatDateHeader(msg.sentAt)}
+                    </span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+                )}
+                <MessageRow
+                  msg={msg}
+                  isFirst={first}
+                  meId={meId}
+                  myRole={myRole ?? null}
+                  replyToMsg={msg.replyToMessageId ? messageIndex.get(msg.replyToMessageId) : undefined}
+                  onReply={onReply}
+                  onEditStart={onEditStart}
+                  onDelete={onDelete}
+                />
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -220,6 +237,7 @@ export default function MessageList({
 
 type RowProps = {
   msg: MessageDto | OptimisticMessage
+  isFirst: boolean
   meId?: string
   myRole: RoomRole | null
   replyToMsg?: MessageDto | OptimisticMessage
@@ -228,29 +246,41 @@ type RowProps = {
   onDelete?: (messageId: string) => void
 }
 
-const MessageRow = ({ msg, meId, myRole, replyToMsg, onReply, onEditStart, onDelete }: RowProps) => {
+const MessageRow = ({ msg, isFirst, meId, myRole, replyToMsg, onReply, onEditStart, onDelete }: RowProps) => {
   const isPending = 'pending' in msg && msg.pending
   const isDeleted = !!msg.deletedAt
   const isMe = !!meId && msg.authorId === meId
+  const displayName = msg.authorUsername.startsWith('xmpp:')
+    ? msg.authorUsername.slice(5)
+    : msg.authorUsername
 
   return (
     <div
-      className={`flex items-end gap-2 px-4 py-0.5 group ${isPending ? 'opacity-50' : ''} ${isMe ? 'flex-row-reverse' : ''}`}
+      className={`group relative flex gap-4 px-4 hover:bg-muted/20 transition-colors ${
+        isFirst ? 'pt-3 pb-0.5' : 'py-0.5'
+      } ${isPending ? 'opacity-60' : ''}`}
     >
-      {/* Avatar — others only */}
-      {!isMe && (
-        <Avatar authorId={msg.authorId} username={msg.authorUsername} isDeleted={isDeleted} />
-      )}
+      {/* Avatar column — 36px wide, always reserved */}
+      <div className="w-9 shrink-0 flex flex-col items-center">
+        {isFirst ? (
+          <SmartAvatar authorId={msg.authorId} username={msg.authorUsername} isDeleted={isDeleted} />
+        ) : (
+          // Hover timestamp for grouped messages
+          <span className="text-[10px] font-mono text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity mt-1 w-full text-right leading-tight">
+            {formatTime(msg.sentAt)}
+          </span>
+        )}
+      </div>
 
-      {/* Bubble column */}
-      <div className={`flex flex-col max-w-[72%] ${isMe ? 'items-end' : 'items-start'}`}>
-        {/* Username + meta — others only */}
-        {!isMe && (
-          <div className="flex items-baseline gap-1.5 mb-0.5 px-1">
-            <span className={`text-xs font-semibold ${isDeleted ? 'text-muted-foreground' : ''}`}>
-              {msg.authorUsername.startsWith('xmpp:')
-                ? msg.authorUsername.slice(5)
-                : msg.authorUsername}
+      {/* Content column */}
+      <div className="flex-1 min-w-0">
+        {/* Header — only first in group */}
+        {isFirst && (
+          <div className="flex items-baseline gap-2 mb-0.5 flex-wrap">
+            <span className={`text-sm font-semibold leading-tight ${
+              isMe ? 'text-emerald-500 dark:text-emerald-400' : 'text-foreground'
+            }`}>
+              {displayName}
             </span>
             {msg.authorUsername.startsWith('xmpp:') && (
               <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-indigo-600/30 text-indigo-300 leading-none">
@@ -260,18 +290,15 @@ const MessageRow = ({ msg, meId, myRole, replyToMsg, onReply, onEditStart, onDel
             {msg.authorId && !isDeleted && (
               <PresenceIndicator userId={msg.authorId} className="self-center" />
             )}
-            <span className="text-[10px] font-mono text-muted-foreground/60">
+            <span className="text-[11px] font-mono text-muted-foreground/50">
               {isPending ? 'sending…' : formatTime(msg.sentAt)}
             </span>
-            {msg.editedAt && !isDeleted && (
-              <span className="text-[10px] font-mono text-muted-foreground/40 italic">edited</span>
-            )}
           </div>
         )}
 
         {/* Reply quote */}
         {replyToMsg && !isDeleted && (
-          <div className={`mb-1 flex items-start gap-1.5 pl-2 border-l-2 border-muted-foreground/30 ${isMe ? 'self-end' : ''}`}>
+          <div className="mb-1 flex items-start gap-1.5 pl-2 border-l-2 border-muted-foreground/30">
             <Reply className="h-3 w-3 text-muted-foreground/50 mt-0.5 shrink-0" />
             <div className="min-w-0">
               <span className="text-[11px] font-mono font-semibold text-muted-foreground">
@@ -284,19 +311,11 @@ const MessageRow = ({ msg, meId, myRole, replyToMsg, onReply, onEditStart, onDel
           </div>
         )}
 
-        {/* Bubble */}
+        {/* Message content */}
         {isDeleted ? (
-          <p className="text-sm text-muted-foreground/50 italic px-1">
-            [Message deleted]
-          </p>
+          <p className="text-sm text-muted-foreground/40 italic">[Message deleted]</p>
         ) : (
-          <div
-            className={`px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words ${
-              isMe
-                ? 'bg-emerald-700 text-white rounded-2xl rounded-br-sm'
-                : 'bg-card text-foreground/90 rounded-2xl rounded-bl-sm'
-            }`}
-          >
+          <div className="text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap break-words">
             {msg.content}
             {msg.attachments.map(a => (
               <FileAttachmentView key={a.id} attachment={a} />
@@ -304,35 +323,22 @@ const MessageRow = ({ msg, meId, myRole, replyToMsg, onReply, onEditStart, onDel
           </div>
         )}
 
-        {/* Timestamp for own messages */}
-        {isMe && !isDeleted && (
-          <div className="flex items-center gap-1 mt-0.5 px-1">
-            {msg.editedAt && (
-              <span className="text-[10px] font-mono text-muted-foreground/40 italic">edited</span>
-            )}
-            <span className="text-[10px] font-mono text-muted-foreground/60">
-              {isPending ? 'sending…' : formatTime(msg.sentAt)}
-            </span>
-          </div>
+        {/* Edited tag */}
+        {msg.editedAt && !isDeleted && (
+          <span className="text-[10px] font-mono text-muted-foreground/40 italic"> (edited)</span>
         )}
       </div>
 
-      {/* Actions */}
+      {/* Actions — appear on hover */}
       {!isPending && meId && (
-        <div className="shrink-0 self-center opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute right-4 top-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <MessageEditMenu
             messageId={msg.id}
             authorId={msg.authorId}
             meId={meId}
             myRole={myRole}
             deletedAt={msg.deletedAt}
-            onReply={() =>
-              onReply?.({
-                messageId: msg.id,
-                username: msg.authorUsername,
-                content: msg.content,
-              })
-            }
+            onReply={() => onReply?.({ messageId: msg.id, username: msg.authorUsername, content: msg.content })}
             onEdit={() => onEditStart?.(msg.id, msg.content)}
             onDelete={() => onDelete?.(msg.id)}
           />
