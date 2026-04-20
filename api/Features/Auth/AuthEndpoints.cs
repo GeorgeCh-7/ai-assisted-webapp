@@ -47,6 +47,8 @@ public static class AuthEndpoints
         {
             var error = result.Errors.Any(e => e.Code == "PasswordTooShort")
                 ? "Password must be at least 6 characters"
+                : result.Errors.Any(e => e.Code == "InvalidUserName")
+                ? "Username contains invalid characters"
                 : result.Errors.First().Description;
             return Results.BadRequest(new { error });
         }

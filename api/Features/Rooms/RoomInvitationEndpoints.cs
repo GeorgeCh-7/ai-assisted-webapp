@@ -46,7 +46,7 @@ public static class RoomInvitationEndpoints
             return Results.NotFound(new { error = "Room not found" });
 
         if (!room.IsPrivate)
-            return Results.BadRequest(new { error = "Public rooms do not use invitations" });
+            return Results.BadRequest(new { error = "Invitations are only valid for private rooms" });
 
         var membership = await db.RoomMemberships
             .FirstOrDefaultAsync(m => m.RoomId == id && m.UserId == callerId);

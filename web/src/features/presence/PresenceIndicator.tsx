@@ -16,6 +16,7 @@ export default function PresenceIndicator({ userId, className }: Props) {
       className={`inline-block h-2 w-2 rounded-full shrink-0 transition-colors ${color} ${className ?? ''}`}
       title={status}
       aria-label={status}
+      data-presence={status}
     />
   )
 }
