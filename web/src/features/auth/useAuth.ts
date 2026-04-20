@@ -57,6 +57,17 @@ export function useResetPassword() {
   })
 }
 
+export function useUploadAvatar() {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData()
+      form.append('avatar', file)
+      return api.uploadForm<{ avatarUrl: string }>('/api/auth/me/avatar', form)
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me'] }),
+  })
+}
+
 export function useDeleteAccount() {
   return useMutation({
     mutationFn: (password: string) =>

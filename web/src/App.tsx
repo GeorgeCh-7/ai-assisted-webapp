@@ -10,6 +10,7 @@ import FriendsPage from './features/friends/FriendsPage'
 import DmWindow from './features/dms/DmWindow'
 import SessionsPage from './features/sessions/SessionsPage'
 import ChangePasswordPage from './features/auth/ChangePasswordPage'
+import ProfilePage from './features/profile/ProfilePage'
 import TopNav from './features/layout/TopNav'
 import RightSidebar from './features/layout/RightSidebar'
 import { HubProvider } from './features/chat/HubProvider'
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="/dms/:threadId" element={<DmWindow />} />
         <Route path="/sessions" element={<SessionsPage />} />
         <Route path="/auth/change-password" element={<ChangePasswordPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

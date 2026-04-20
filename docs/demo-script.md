@@ -44,6 +44,7 @@
 - Message sends are **idempotency-keyed** — if the network drops mid-send, the server deduplicates on reconnect so no duplicate messages appear.
 - Message history uses **watermark cursors** (monotonic per-room sequence), not offset pagination — scales to 10k+ messages with constant-time older-message fetches.
 - The catalog real-time update uses a new SignalR group `public-rooms-catalog`. Every connected client joins on hub connect. The `RoomCreated` / `RoomDeleted` broadcast fires *after* the DB commit to avoid a refetch race.
+- Each message bubble shows a **DiceBear avatar** by default. Users can upload a custom photo via the **Profile** page (top-nav profile menu → "Profile &amp; avatar") — stored on the server, served from `/api/users/{id}/avatar`. Falls back to DiceBear → colored-letter circle.
 
 ---
 

@@ -46,8 +46,23 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return JSON.parse(text) as T
 }
 
+async function uploadForm<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    body: form,
+    credentials: 'include',
+    headers: { 'X-XSRF-TOKEN': getCsrfToken() },
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: undefined })) as { error?: string }
+    throw new ApiError(res.status, body.error ?? `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<T>
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
+  uploadForm: <T>(path: string, form: FormData) => uploadForm<T>(path, form),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
   put: <T>(path: string, body?: unknown) =>

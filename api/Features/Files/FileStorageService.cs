@@ -30,4 +30,14 @@ public class FileStorageService
         if (File.Exists(storagePath))
             File.Delete(storagePath);
     }
+
+    public async Task<string> SaveAvatarAsync(Guid userId, Stream content, CancellationToken ct = default)
+    {
+        var dir = Path.Combine(_basePath, "avatars");
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, userId.ToString());
+        await using var fs = File.Create(path);
+        await content.CopyToAsync(fs, ct);
+        return path;
+    }
 }
