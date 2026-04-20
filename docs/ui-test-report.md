@@ -40,6 +40,37 @@
 
 ---
 
+## Post-Sweep Fixes (2026-04-20, same session)
+
+| Item | Fix | Commit |
+|---|---|---|
+| Room/DM unread badges not real-time | Added `RoomUnreadUpdated` / `DmUnreadUpdated` SignalR events; server notifies per-user group after DB increment; `useGlobalHubEvents` handles both | `a57bd65` |
+| TopNav Contacts badge not rendering | Wired `useFriendRequests()` into `TopNav` — badge was declared but never populated | `701fccd` |
+| Presence not seeded from friends list | `useFriends` hook now seeds `['presence', userId]` cache for each friend on load | `701fccd` |
+| TanStack devtools visible during demo | Gated behind `VITE_SHOW_DEVTOOLS=true` env var | `1c063c7` |
+| BUG-02 code not committed | `useRoomMembers` hook + `ChatWindow.tsx` call were implemented but not staged; committed | `701fccd` |
+
+## Presence + Notification E2E Suite (2026-04-20)
+
+**File:** `e2e/tests/presence-notifications.spec.ts`  
+**Run time:** ~57s (9 tests, 1 worker)  
+**Result:** 9/9 passed  
+**Commit:** `a57bd65`
+
+| # | Scenario | Result |
+|---|---|---|
+| 1 | Presence online → offline when tab closes | ✅ Pass |
+| 2 | Presence stable with 2 tabs; offline only when both close | ✅ Pass |
+| 3 | Friend request badge appears on nav without refresh | ✅ Pass |
+| 4 | Room invitation bell badge appears without refresh; accept works | ✅ Pass |
+| 5 | New public room appears in catalog within 3s | ✅ Pass |
+| 6 | DM thread appears in sidebar without refresh | ✅ Pass |
+| 7 | 3 rapid messages arrive in order, no duplicates (both directions) | ✅ Pass |
+| 8 | DM unread badge increments without refresh | ✅ Pass (required new `DmUnreadUpdated` event) |
+| 9 | Room unread badge increments when user is away from room | ✅ Pass (required new `RoomUnreadUpdated` event) |
+
+---
+
 ---
 
 ## Bugs Found

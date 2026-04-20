@@ -20,11 +20,17 @@
 - **BUG-05** (public room invitation error message confusing) — changed to "Invitations are only valid for private rooms" in `RoomInvitationEndpoints.cs`.
 - **BUG-06** (PresenceIndicator not queryable by automated tests) — added `data-presence={status}` attribute to the indicator span.
 
+## Resolved post-sweep (2026-04-20)
+
+- **Room/DM unread badges not updating in real-time** — `RoomUnreadUpdated` and `DmUnreadUpdated` SignalR events added. Server broadcasts to each member's `user-{id}` group after incrementing the DB counter; `useGlobalHubEvents` handles both events to call `incrementUnread` and invalidate `['dms']` respectively. Verified by `presence-notifications.spec.ts` tests 8 and 9.
+- **TopNav Contacts badge missing** — `useFriendRequests()` was not wired into `TopNav`; the badge could not render even when incoming requests existed. Fixed.
+- **Presence not seeded from friends list** — `useFriends` hook now seeds `['presence', userId]` for each friend on load (same pattern as `useRoomMembers`).
+- **TanStack Query devtools visible during demo** — gated on `VITE_SHOW_DEVTOOLS=true`; unset by default.
+
 ## Accepted Behaviors (not bugs, no fix planned)
 
-- **File scope validated before size in edge case** — API correctly validates scope/scopeId before file size for malformed requests. Real UI always sends a valid scope, so users always see 413. Accepted: validation ordering is sensible (scope determines limit context).
-- **Public room invitation API message** — UI correctly hides the invitation tab for public rooms; the "Invitations are only valid for private rooms" message is only reachable by direct API callers. Accepted: not a user-facing issue.
-- **PresenceIndicator `data-presence` attribute** — was missing, making automated presence assertions unreliable. Added as part of BUG-06 fix.
+- **File scope validated before size in edge case** — API correctly validates scope/scopeId before file size for malformed requests. Real UI always sends a valid scope, so users always see 413. Accepted: validation ordering is sensible.
+- **Public room invitation API message** — UI correctly hides the invitation tab for public rooms; the error is only reachable by direct API callers.
 
 ---
 
@@ -37,6 +43,6 @@ These were intentionally not fixed. Do not treat as new scope without an explici
 - Expected per contracts.md: private rooms excluded unless caller is member or invitee
 - Backend filter verified correct (`RoomsEndpoints.cs:39-42`)
 - MSW filter verified correct (`handlers.ts:613-624`)
-- Actual cause: unknown — requires UI-level investigation of whether there are separate "public" vs "private" views or one catalog rendering twice
+- Actual cause: unknown — requires UI-level investigation
 - Impact: visible UX confusion; judges will notice
 - Fix effort estimate: 30-60 minutes
