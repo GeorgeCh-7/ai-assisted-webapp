@@ -2,15 +2,16 @@
  * AFK + multi-tab presence tests
  *
  * Covers:
- *  1. Bidirectional online: A sees B online, B sees A online simultaneously
+ *  1. Bidirectional online: A sees B online, B sees A online; also in DM sidebar
  *  2. Multi-tab: user stays online while any tab is open; offline only when last tab closes
  *  3. Three-user broadcast: status change seen by all watchers at once
- *  4. AFK transition: user goes AFK after idle, indicator flips; interaction brings them back online
- *  5. AFK → re-engage: AFK clears as soon as user interacts
+ *  4. AFK transition (room): user goes AFK after idle; DM sidebar + message row both flip;
+ *     interaction brings them back online
+ *  5. AFK transition (DM): same checks inside a DM thread window
  *
- * Test 4 & 5 use window.__freezeIdle() / window.__markActive() hooks (DEV only) so we
- * don't have to wait the full 5-min client idle + 60 s server sweep in CI.
- * The test is marked test.slow() (3× default timeout) to budget for the ~75 s server sweep.
+ * Tests 4 & 5 use window.__freezeIdle() / window.__markActive() hooks (DEV only) so we
+ * don't have to wait 5-min client idle + 60 s server sweep in CI.
+ * Both are marked test.slow() (3× default timeout) to budget for the ~75 s server sweep.
  */
 
 import { test, expect } from '../fixtures/index'
@@ -43,10 +44,7 @@ async function openDm(
   return (await r.json()) as { id: string }
 }
 
-async function createRoom(
-  ctx: import('../helpers/auth').AuthedContext,
-  name: string,
-) {
+async function createRoom(ctx: import('../helpers/auth').AuthedContext, name: string) {
   const r = await ctx.context.request.post(`${API}/api/rooms`, {
     data: { name, description: '' },
     headers: { 'X-XSRF-TOKEN': await ctx.xsrf() },
@@ -65,39 +63,54 @@ async function waitConnected(page: import('@playwright/test').Page) {
   await expect(page.locator('span[title="Connected"]')).toBeVisible({ timeout: 15_000 })
 }
 
+function dmSidebarLink(page: import('@playwright/test').Page, threadId: string) {
+  return page.locator(`a[href="/dms/${threadId}"]`)
+}
+
 // ── Test 1: Bidirectional online ──────────────────────────────────────────────
 
-test('afk: both users see each other online simultaneously', async ({ userA, userB }) => {
+test('afk: both users see each other online — message row + DM sidebar', async ({
+  userA,
+  userB,
+}) => {
+  await makeFriends(userA, userB)
+  const thread = await openDm(userA, userB)
   const room = await createRoom(userA, `afk-bidir-${Date.now()}`)
   await joinRoom(userB, room.id)
 
-  // B connects first
+  // B connects first (so it receives A's online broadcast)
   const pageB = await userB.context.newPage()
   await pageB.goto(`/rooms/${room.id}`)
   await waitConnected(pageB)
 
-  // A connects second → B receives A's online event
   const pageA = await userA.context.newPage()
   await pageA.goto(`/rooms/${room.id}`)
   await waitConnected(pageA)
 
-  // A sends a message so their row is visible to B
+  // Each sends a message so their row is visible to the other
   await pageA.locator('textarea').fill('bidir check')
   await pageA.keyboard.press('Enter')
   await expect(pageB.getByText('bidir check')).toBeVisible({ timeout: 10_000 })
 
-  // B sends a message so their row is visible to A
   await pageB.locator('textarea').fill('bidir reply')
   await pageB.keyboard.press('Enter')
   await expect(pageA.getByText('bidir reply')).toBeVisible({ timeout: 10_000 })
 
-  // Both see each other as online
+  // Message row presence
   const msgRowA = pageA.locator('.group').filter({ hasText: 'bidir reply' }).first()
   const msgRowB = pageB.locator('.group').filter({ hasText: 'bidir check' }).first()
   await expect(msgRowA.locator('[data-presence="online"]')).toBeVisible({ timeout: 8_000 })
   await expect(msgRowB.locator('[data-presence="online"]')).toBeVisible({ timeout: 8_000 })
 
+  // DM sidebar presence (B's sidebar shows A; A's sidebar shows B)
+  await expect(dmSidebarLink(pageB, thread.id).locator('[data-presence="online"]')).toBeVisible({ timeout: 8_000 })
+  await expect(dmSidebarLink(pageA, thread.id).locator('[data-presence="online"]')).toBeVisible({ timeout: 8_000 })
+
+  // A disconnects — B sees offline in both places
   await pageA.close()
+  await expect(msgRowB.locator('[data-presence="offline"]')).toBeVisible({ timeout: 15_000 })
+  await expect(dmSidebarLink(pageB, thread.id).locator('[data-presence="offline"]')).toBeVisible({ timeout: 5_000 })
+
   await pageB.close()
 })
 
@@ -107,10 +120,11 @@ test('afk: user stays online while any tab open; offline only when last tab clos
   userA,
   userB,
 }) => {
+  await makeFriends(userA, userB)
+  const thread = await openDm(userA, userB)
   const room = await createRoom(userA, `afk-multitab-${Date.now()}`)
   await joinRoom(userB, room.id)
 
-  // B watches
   const pageB = await userB.context.newPage()
   await pageB.goto(`/rooms/${room.id}`)
   await waitConnected(pageB)
@@ -123,23 +137,26 @@ test('afk: user stays online while any tab open; offline only when last tab clos
   await pageA2.goto(`/rooms/${room.id}`)
   await waitConnected(pageA2)
 
-  // A sends from tab 1 so row is visible
   await pageA1.locator('textarea').fill('multitab msg')
   await pageA1.keyboard.press('Enter')
   await expect(pageB.getByText('multitab msg')).toBeVisible({ timeout: 10_000 })
 
   const msgRow = pageB.locator('.group').filter({ hasText: 'multitab msg' }).first()
+  const sidebarLink = dmSidebarLink(pageB, thread.id)
   await expect(msgRow.locator('[data-presence="online"]')).toBeVisible({ timeout: 8_000 })
+  await expect(sidebarLink.locator('[data-presence="online"]')).toBeVisible({ timeout: 5_000 })
 
   // Close tab 1 — A still has tab 2 open → should remain online
   await pageA1.close()
   await pageB.waitForTimeout(3_000)
   await expect(msgRow.locator('[data-presence="online"]')).toBeVisible({ timeout: 5_000 })
+  await expect(sidebarLink.locator('[data-presence="online"]')).toBeVisible({ timeout: 5_000 })
   await expect(msgRow.locator('[data-presence="offline"]')).not.toBeVisible()
 
-  // Close tab 2 — last connection gone → A goes offline
+  // Close tab 2 — last connection gone → A goes offline in both places
   await pageA2.close()
   await expect(msgRow.locator('[data-presence="offline"]')).toBeVisible({ timeout: 15_000 })
+  await expect(sidebarLink.locator('[data-presence="offline"]')).toBeVisible({ timeout: 5_000 })
   await expect(msgRow.locator('[data-presence="online"]')).not.toBeVisible()
 
   await pageB.close()
@@ -186,22 +203,23 @@ test('afk: status change seen by multiple watchers simultaneously', async ({
   await pageC.close()
 })
 
-// ── Test 4: AFK transition ────────────────────────────────────────────────────
-// Uses __freezeIdle() hook (DEV only) to stop heartbeats immediately.
-// Server AFK sweeper needs ~60–75 s to detect the gap — test.slow() triples timeout.
+// ── Test 4: AFK transition (room + DM sidebar) ────────────────────────────────
 
-test('afk: user goes AFK when idle, returns online on interaction', async ({ userA, userB }) => {
+test('afk: user goes AFK when idle — message row + DM sidebar both flip; returns online on interaction', async ({
+  userA,
+  userB,
+}) => {
   test.slow()
 
+  await makeFriends(userA, userB)
+  const thread = await openDm(userA, userB)
   const room = await createRoom(userA, `afk-idle-${Date.now()}`)
   await joinRoom(userB, room.id)
 
-  // B watches
   const pageB = await userB.context.newPage()
   await pageB.goto(`/rooms/${room.id}`)
   await waitConnected(pageB)
 
-  // A connects and sends a message
   const pageA = await userA.context.newPage()
   await pageA.goto(`/rooms/${room.id}`)
   await waitConnected(pageA)
@@ -211,7 +229,10 @@ test('afk: user goes AFK when idle, returns online on interaction', async ({ use
   await expect(pageB.getByText('afk test msg')).toBeVisible({ timeout: 10_000 })
 
   const msgRow = pageB.locator('.group').filter({ hasText: 'afk test msg' }).first()
+  const sidebarLink = dmSidebarLink(pageB, thread.id)
+
   await expect(msgRow.locator('[data-presence="online"]')).toBeVisible({ timeout: 8_000 })
+  await expect(sidebarLink.locator('[data-presence="online"]')).toBeVisible({ timeout: 5_000 })
 
   // Freeze A's idle clock → client stops sending heartbeats immediately
   await pageA.evaluate(() => {
@@ -219,11 +240,13 @@ test('afk: user goes AFK when idle, returns online on interaction', async ({ use
     if (typeof fn === 'function') fn()
   })
 
-  // Wait for server AFK sweeper to detect missing heartbeats and broadcast AFK
+  // Server AFK sweeper detects missing heartbeats → broadcasts AFK
   await expect(msgRow.locator('[data-presence="afk"]')).toBeVisible({ timeout: 80_000 })
+  await expect(sidebarLink.locator('[data-presence="afk"]')).toBeVisible({ timeout: 5_000 })
   await expect(msgRow.locator('[data-presence="online"]')).not.toBeVisible()
+  await expect(sidebarLink.locator('[data-presence="online"]')).not.toBeVisible()
 
-  // A interacts → markActive() fires → heartbeat sent → back to online
+  // A interacts → heartbeat sent → back to online in both places
   await pageA.evaluate(() => {
     const fn = (window as Record<string, unknown>)['__markActive']
     if (typeof fn === 'function') fn()
@@ -231,21 +254,26 @@ test('afk: user goes AFK when idle, returns online on interaction', async ({ use
   await pageA.locator('textarea').dispatchEvent('pointerdown')
 
   await expect(msgRow.locator('[data-presence="online"]')).toBeVisible({ timeout: 20_000 })
+  await expect(sidebarLink.locator('[data-presence="online"]')).toBeVisible({ timeout: 5_000 })
   await expect(msgRow.locator('[data-presence="afk"]')).not.toBeVisible()
+  await expect(sidebarLink.locator('[data-presence="afk"]')).not.toBeVisible()
 
   await pageA.close()
   await pageB.close()
 })
 
-// ── Test 5: AFK in DM thread ──────────────────────────────────────────────────
+// ── Test 5: AFK in DM thread + sidebar ───────────────────────────────────────
 
-test('afk: AFK visible in DM window, clears on re-engagement', async ({ userA, userB }) => {
+test('afk: AFK visible in DM message row + sidebar, clears on re-engagement', async ({
+  userA,
+  userB,
+}) => {
   test.slow()
 
   await makeFriends(userA, userB)
   const thread = await openDm(userA, userB)
 
-  // B connects first
+  // B connects first — also open the /friends page in a separate tab so sidebar is visible
   const pageB = await userB.context.newPage()
   await pageB.goto(`/dms/${thread.id}`)
   await waitConnected(pageB)
@@ -259,7 +287,10 @@ test('afk: AFK visible in DM window, clears on re-engagement', async ({ userA, u
   await expect(pageB.getByText('dm afk test')).toBeVisible({ timeout: 10_000 })
 
   const msgRow = pageB.locator('.group').filter({ hasText: 'dm afk test' }).first()
+  const sidebarLink = dmSidebarLink(pageB, thread.id)
+
   await expect(msgRow.locator('[data-presence="online"]')).toBeVisible({ timeout: 8_000 })
+  await expect(sidebarLink.locator('[data-presence="online"]')).toBeVisible({ timeout: 5_000 })
 
   // Freeze A
   await pageA.evaluate(() => {
@@ -268,13 +299,16 @@ test('afk: AFK visible in DM window, clears on re-engagement', async ({ userA, u
   })
 
   await expect(msgRow.locator('[data-presence="afk"]')).toBeVisible({ timeout: 80_000 })
+  await expect(sidebarLink.locator('[data-presence="afk"]')).toBeVisible({ timeout: 5_000 })
 
-  // A types in the DM composer — natural interaction resets the idle clock
+  // A types in the DM composer — natural interaction resets idle clock
   await pageA.locator('textarea').click()
   await pageA.locator('textarea').type('coming back')
 
   await expect(msgRow.locator('[data-presence="online"]')).toBeVisible({ timeout: 20_000 })
+  await expect(sidebarLink.locator('[data-presence="online"]')).toBeVisible({ timeout: 5_000 })
   await expect(msgRow.locator('[data-presence="afk"]')).not.toBeVisible()
+  await expect(sidebarLink.locator('[data-presence="afk"]')).not.toBeVisible()
 
   await pageA.close()
   await pageB.close()
