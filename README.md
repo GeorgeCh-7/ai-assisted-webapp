@@ -36,13 +36,13 @@ The app is designed to stay usable at the shape of a typical community: hundreds
 - Edit with an "edited" indicator; soft-delete by author or room admin.
 - 3 KB UTF-8 content limit, enforced server-side.
 - Cursor-based infinite scroll over watermark-ordered messages; stable at 10,000+ messages per room.
-- Per-room unread counts, cleared on open.
+- Per-room unread counts, updated in real time via SignalR push to member user groups, cleared on open.
 
 ### Direct messages
 - Friends-gated one-to-one threads; existing threads remain readable after a ban.
 - Full message feature parity with rooms — reply, edit, delete, attachments.
 - User-to-user block freezes the thread as read-only; prior history preserved.
-- Per-thread unread counts.
+- Per-thread unread counts, updated in real time via `DmUnreadUpdated` push to the recipient.
 
 ### Friends & contacts
 - Request / accept / decline by username or from a room member list.
@@ -194,6 +194,7 @@ Key variables (see `docker-compose.yml` for the full list):
 | `DOTNET_USE_POLLING_FILE_WATCHER` | api | Required for hot reload across Docker volumes |
 | `VITE_API_URL` | web | Base URL the frontend targets |
 | `VITE_MSW_ENABLED` | web | Switch frontend to mocked backend |
+| `VITE_SHOW_DEVTOOLS` | web | Set to `true` to show TanStack Query devtools (hidden by default) |
 
 ## Testing
 
