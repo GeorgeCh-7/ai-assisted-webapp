@@ -49,4 +49,5 @@ coverage/
 *.pid
 .claude/
 e2e/test-results/
- 
+ .playwright-mcp/
+*.png

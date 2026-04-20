@@ -202,7 +202,9 @@ const MessageRow = ({ msg, meId, myRole, replyToMsg, onReply, onEditStart, onDel
             isDeleted ? 'bg-muted-foreground/30' : avatarColor(msg.authorUsername)
           }`}
         >
-          {msg.authorUsername[0].toUpperCase()}
+          {(msg.authorUsername.startsWith('xmpp:')
+            ? msg.authorUsername.slice(5)
+            : msg.authorUsername)[0].toUpperCase()}
         </div>
       )}
 
@@ -212,8 +214,15 @@ const MessageRow = ({ msg, meId, myRole, replyToMsg, onReply, onEditStart, onDel
         {!isMe && (
           <div className="flex items-baseline gap-1.5 mb-0.5 px-1">
             <span className={`text-xs font-semibold ${isDeleted ? 'text-muted-foreground' : ''}`}>
-              {msg.authorUsername}
+              {msg.authorUsername.startsWith('xmpp:')
+                ? msg.authorUsername.slice(5)
+                : msg.authorUsername}
             </span>
+            {msg.authorUsername.startsWith('xmpp:') && (
+              <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-indigo-600/30 text-indigo-300 leading-none">
+                via Jabber
+              </span>
+            )}
             {msg.authorId && !isDeleted && (
               <PresenceIndicator userId={msg.authorId} className="self-center" />
             )}

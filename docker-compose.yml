@@ -29,11 +29,44 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      ejabberd:
+        condition: service_healthy
     volumes:
       - ./api:/src
       - dotnet_nuget:/root/.nuget
       - dp_keys:/root/.aspnet/DataProtection-Keys
     working_dir: /src
+
+  ejabberd:
+    image: ghcr.io/processone/ejabberd:latest
+    ports:
+      - "5222:5222"
+      - "5280:5280"
+    volumes:
+      - ./ejabberd/ejabberd.yml:/opt/ejabberd/conf/ejabberd.yml:ro
+      - ejabberd_data:/opt/ejabberd/database
+    healthcheck:
+      test: ["CMD", "/opt/ejabberd/bin/ejabberdctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+
+  # One-shot container that registers XMPP accounts after ejabberd is ready
+  ejabberd-setup:
+    image: curlimages/curl:latest
+    depends_on:
+      ejabberd:
+        condition: service_healthy
+    restart: "no"
+    command:
+      - sh
+      - -c
+      - |
+        curl -sf -X POST http://ejabberd:5280/api/register -H 'Content-Type: application/json' -d '{"user":"bridge-bot","host":"chat.local","password":"Bridge123!"}' || true
+        curl -sf -X POST http://ejabberd:5280/api/register -H 'Content-Type: application/json' -d '{"user":"gajim-user-a","host":"chat.local","password":"Test123!"}' || true
+        curl -sf -X POST http://ejabberd:5280/api/register -H 'Content-Type: application/json' -d '{"user":"gajim-user-b","host":"chat.local","password":"Test123!"}' || true
+        echo 'ejabberd accounts ready'
 
   web:
     build:
@@ -53,3 +86,4 @@ volumes:
   pgdata:
   dotnet_nuget:
   dp_keys:
+  ejabberd_data:
