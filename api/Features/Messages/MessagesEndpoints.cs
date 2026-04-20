@@ -83,6 +83,14 @@ public static class MessagesEndpoints
 
         string? nextCursor = hasMore ? page.Last().Watermark.ToString() : null;
 
+        var messageIds = page.Select(m => m.Id).ToList();
+        var attachmentsByMessage = await db.FileAttachments
+            .Where(a => a.MessageId != null && messageIds.Contains(a.MessageId.Value))
+            .ToListAsync();
+        var attachmentLookup = attachmentsByMessage
+            .GroupBy(a => a.MessageId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var items = page.Select(m => new MessageResponse(
             m.Id,
             m.RoomId,
@@ -95,7 +103,9 @@ public static class MessagesEndpoints
             m.EditedAt,
             m.DeletedAt,
             m.ReplyToMessageId,
-            Array.Empty<FileAttachmentResponse>()));
+            attachmentLookup.TryGetValue(m.Id, out var atts)
+                ? atts.Select(a => new FileAttachmentResponse(a.Id, a.OriginalFilename, a.ContentType, a.SizeBytes)).ToList()
+                : []));
 
         return Results.Ok(new PagedResponse<MessageResponse>(items, nextCursor));
     }

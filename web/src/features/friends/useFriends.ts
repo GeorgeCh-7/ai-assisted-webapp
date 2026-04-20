@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { FriendDto, FriendRequestsResponse, SendFriendRequestResponse } from './types'
+import type { PresenceStatus } from '@/features/presence/usePresence'
 
 type FriendsListResponse = {
   items: FriendDto[]
@@ -8,10 +10,21 @@ type FriendsListResponse = {
 }
 
 export function useFriends() {
-  return useQuery({
+  const qc = useQueryClient()
+  const query = useQuery({
     queryKey: ['friends'],
     queryFn: () => api.get<FriendsListResponse>('/api/friends'),
   })
+
+  const friends = query.data?.items
+  useEffect(() => {
+    if (!friends) return
+    for (const f of friends) {
+      qc.setQueryData<PresenceStatus>(['presence', f.userId], f.presence)
+    }
+  }, [friends, qc])
+
+  return query
 }
 
 export function useFriendRequests() {

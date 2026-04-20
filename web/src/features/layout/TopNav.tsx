@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useMe, useLogout } from '@/features/auth/useAuth'
 import { useInvitations, useAcceptInvitation, useDeclineInvitation } from '@/features/rooms/useRoomInvitations'
+import { useFriendRequests } from '@/features/friends/useFriends'
 import { useAfkTracker } from '@/features/presence/useAfkTracker'
 import DeleteAccountDialog from '@/features/auth/DeleteAccountDialog'
 
@@ -37,12 +38,14 @@ export default function TopNav() {
   const { data: invitations } = useInvitations()
   const { mutate: accept } = useAcceptInvitation()
   const { mutate: decline } = useDeclineInvitation()
+  const { data: friendRequests } = useFriendRequests()
   const [inviteOpen, setInviteOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   useAfkTracker()
 
   const pendingCount = invitations?.items.length ?? 0
+  const friendRequestCount = friendRequests?.incoming.length ?? 0
 
   const handleLogout = () => {
     logout(undefined, { onSuccess: () => navigate('/login') })
@@ -66,8 +69,15 @@ export default function TopNav() {
         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs font-mono" asChild>
           <Link to="/rooms?private=1">Private Rooms</Link>
         </Button>
-        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs font-mono" asChild>
-          <Link to="/friends">Contacts</Link>
+        <Button variant="ghost" size="sm" className="relative h-7 px-2 text-xs font-mono" asChild>
+          <Link to="/friends">
+            Contacts
+            {friendRequestCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-emerald-500 text-white text-[9px] font-mono flex items-center justify-center leading-none">
+                {friendRequestCount > 9 ? '9+' : friendRequestCount}
+              </span>
+            )}
+          </Link>
         </Button>
         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs font-mono" asChild>
           <Link to="/sessions">Sessions</Link>

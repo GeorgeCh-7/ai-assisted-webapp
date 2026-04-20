@@ -59,13 +59,13 @@
 - Private-room-catalog leak fix (known-bugs.md Bug 1).
 - UI polish pass along the demo path.
 - Written demo script (`docs/demo-script.md`) rehearsed end-to-end in under 6 minutes.
-- **(P2, shipped — option d)** Minimal XMPP via embedded ejabberd + one-way bridge. ejabberd runs in docker-compose on port 5222. A .NET `BackgroundService` (`XmppBridgeService`) connects as `bridge-bot@chat.local`, joins `bridge@conference.chat.local` MUC, and forwards incoming groupchat messages into the app's `general` room. Messages from XMPP users carry a "via Jabber" badge in the UI. Gajim accounts: `gajim-user-a` / `gajim-user-b` @ `chat.local:5222`, password `Test123!`.
+- **(P2, shipped — option d, bidirectional)** Minimal XMPP via embedded ejabberd + bidirectional bridge. ejabberd runs in docker-compose on port 5222. A .NET `BackgroundService` (`XmppBridgeService`) connects as `bridge-bot@chat.local`, joins `bridge@conference.chat.local` MUC, and forwards incoming groupchat messages into the app's `general` room and relays app messages back out. Messages from XMPP users carry a "via Jabber" badge in the UI. Gajim accounts: `gajim-user-a` / `gajim-user-b` @ `chat.local:5222`, password `Test123!`.
+- **(Bonus, shipped beyond original scope)** XMPP S2S federation between two ejabberd instances. A second ejabberd service (`fed.local`, port 5223) runs alongside the primary. Both servers authenticate via S2S dialback so `gajim-user-fed@fed.local` can join `bridge@conference.chat.local` and participate in the bridge. DNS resolution uses Erlang's `inet_res` pointed at Docker's embedded DNS (127.0.0.11); `conference.chat.local` and `conference.fed.local` MUC subdomains are registered as Docker network aliases.
 - **User avatars** — DiceBear `initials` SVG avatars as default; custom avatar upload via `/profile` page (image stored on local filesystem, served from `GET /api/users/{id}/avatar`). Message bubbles try the custom avatar first, fall back to DiceBear, then to a colored-letter circle. Mini avatar shown in the top-nav profile button.
 
 ### Explicitly cut from the original Phase 3 brief
 
-- **Server-to-server XMPP federation** (any form). The brief's §6 federation load test (50+/50+, ≥60 s bidirectional) is not in scope.
-- **Admin dashboard.** Cut alongside federation — the dashboard's purpose per the original brief was Jabber connection list + federation traffic stats; without federation, it has no unique content.
+- **Admin dashboard.** The dashboard's purpose per the original brief was Jabber connection list + federation traffic stats; with the demo relying on Gajim directly, the dashboard adds no unique value.
 - **Phase 3 automated tests** for the new surface. Existing Phase 1 + Phase 2 test suites continue to run; Phase 3 relies on the demo script as the manual safety net.
 
 **Gate:** See `docs/features/phase-3-spec.md` Scorecard. Demo walks end-to-end across two browser profiles in ≤ 6 minutes without a live surprise, and the existing Phase 1 + Phase 2 test suites continue to pass.

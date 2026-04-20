@@ -1,0 +1,79 @@
+- generic [ref=e2]:
+  - generic [ref=e103]:
+    - navigation [ref=e104]:
+      - link "◈ Chat" [ref=e105] [cursor=pointer]:
+        - /url: /rooms
+      - generic [ref=e106]:
+        - link "Public Rooms" [ref=e107] [cursor=pointer]:
+          - /url: /rooms
+        - link "Private Rooms" [ref=e108] [cursor=pointer]:
+          - /url: /rooms?private=1
+        - link "Contacts" [ref=e109] [cursor=pointer]:
+          - /url: /friends
+        - link "Sessions" [ref=e110] [cursor=pointer]:
+          - /url: /sessions
+      - button "2" [ref=e111] [cursor=pointer]:
+        - img
+        - generic [ref=e112]: "2"
+      - button "alice_diag" [ref=e113] [cursor=pointer]:
+        - img
+        - text: alice_diag
+    - generic [ref=e114]:
+      - generic [ref=e157]:
+        - generic [ref=e158]:
+          - link "Back to contacts" [ref=e159] [cursor=pointer]:
+            - /url: /friends
+            - img [ref=e160]
+          - generic [ref=e163]:
+            - generic [ref=e164]: bob_diag
+            - generic "Connected" [ref=e165]
+          - img [ref=e167]
+        - generic [ref=e173]:
+          - generic [ref=e185]:
+            - generic [ref=e186]: A
+            - generic [ref=e187]:
+              - generic [ref=e188]:
+                - generic [ref=e189]: alice_diag
+                - generic "offline" [ref=e190]
+                - generic [ref=e191]: 02:22
+              - paragraph [ref=e192]: rapid-dm-1
+            - button "Message actions" [ref=e194] [cursor=pointer]:
+              - img
+          - generic [ref=e195]:
+            - generic [ref=e196]: A
+            - generic [ref=e197]:
+              - generic [ref=e198]:
+                - generic [ref=e199]: alice_diag
+                - generic "offline" [ref=e200]
+                - generic [ref=e201]: 02:22
+              - paragraph [ref=e202]: rapid-dm-2
+            - button "Message actions" [ref=e204] [cursor=pointer]:
+              - img
+        - generic [ref=e177]:
+          - textbox "Type a message… (Enter to send, Shift+Enter for newline)" [active] [ref=e179]
+          - button "Attach file" [ref=e180] [cursor=pointer]:
+            - img
+          - button "Send message" [disabled]:
+            - img
+      - generic [ref=e135]:
+        - generic [ref=e136]: My Rooms
+        - generic [ref=e137]:
+          - link "# general" [ref=e138] [cursor=pointer]:
+            - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+            - generic [ref=e139]: "#"
+            - generic [ref=e140]: general
+          - link "# perm-1776636855423" [ref=e141] [cursor=pointer]:
+            - /url: /rooms/b2137311-3868-4414-8c14-5cde611ef586
+            - generic [ref=e142]: "#"
+            - generic [ref=e143]: perm-1776636855423
+        - generic [ref=e144]: Direct Messages
+        - link "offline bob_diag" [ref=e182] [cursor=pointer]:
+          - /url: /dms/6aeb6f77-87cb-4586-ba75-c8b9be9326bd
+          - generic "offline" [ref=e183]
+          - generic [ref=e184]: bob_diag
+        - link "Manage contacts →" [ref=e146] [cursor=pointer]:
+          - /url: /friends
+  - generic [ref=e4]:
+    - img [ref=e6]
+    - button "Open Tanstack query devtools" [ref=e54] [cursor=pointer]:
+      - img [ref=e55]

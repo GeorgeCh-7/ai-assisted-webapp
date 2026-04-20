@@ -2,10 +2,10 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Channels;
 using Api.Data;
 using Api.Domain;
 using Api.Hubs;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -19,8 +19,20 @@ public sealed class XmppBridgeService : BackgroundService
     private readonly IConfiguration _cfg;
     private readonly ILogger<XmppBridgeService> _log;
 
-    // Shared fixed GUID for the bridge system user (seeded in Program.cs)
-    public static readonly Guid BridgeSystemUserId = new("00000000-0000-0000-0000-000000000001");
+    // Outbound queue: app messages → MUC. Bounded so a disconnected bridge can't OOM.
+    private readonly Channel<(string Sender, string Body)> _outbound =
+        Channel.CreateBounded<(string, string)>(
+            new BoundedChannelOptions(200) { FullMode = BoundedChannelFullMode.DropOldest });
+
+    // Resolved once the bridge finds the configured room in the DB.
+    private Guid? _bridgeRoomId;
+
+    /// <summary>Room ID of the configured bridge target room, once resolved.</summary>
+    public Guid? BridgeRoomId => _bridgeRoomId;
+
+    /// <summary>Enqueue an app message for forwarding to the XMPP MUC.</summary>
+    public bool TryEnqueueOutbound(string senderUsername, string body) =>
+        _outbound.Writer.TryWrite((senderUsername, body));
 
     public XmppBridgeService(
         IServiceScopeFactory scopeFactory,
@@ -38,8 +50,9 @@ public sealed class XmppBridgeService : BackgroundService
     {
         if (_cfg.GetValue<bool>("Xmpp:Enabled") is false) return;
 
-        // Give ejabberd time to finish startup and for the setup container to register accounts
-        await Task.Delay(TimeSpan.FromSeconds(20), ct);
+        // Give ejabberd time to finish startup and for ejabberd-setup to register accounts.
+        // ejabberd healthcheck allows up to ~3 min; 60s covers typical fast startups.
+        await Task.Delay(TimeSpan.FromSeconds(60), ct);
 
         while (!ct.IsCancellationRequested)
         {
@@ -127,7 +140,7 @@ public sealed class XmppBridgeService : BackgroundService
         if (!authResp.Contains("success"))
         {
             _log.LogError("XMPP auth failed: {resp}", authResp);
-            return;
+            throw new InvalidOperationException("XMPP auth failed — account not registered yet or wrong password");
         }
 
         // --- 4. Re-open stream after auth ---
@@ -144,10 +157,21 @@ public sealed class XmppBridgeService : BackgroundService
 
         _log.LogInformation("XMPP bridge joined {muc}", mucJid);
 
+        // Eagerly resolve the bridge room ID so ChatHub can start forwarding immediately
+        await ResolveBridgeRoomIdAsync(ct);
+
         // --- 7. Message loop ---
         while (!ct.IsCancellationRequested)
         {
-            // Check for complete <message> stanzas in buffer
+            // Drain outbound queue → send to MUC
+            while (_outbound.Reader.TryRead(out var outMsg))
+            {
+                var xml = $"<message to='{mucJid}' type='groupchat' xmlns='jabber:client'>" +
+                          $"<body>[{outMsg.Sender}]: {outMsg.Body}</body></message>";
+                await Send(xml);
+            }
+
+            // Check for complete <message> stanzas in inbound buffer
             while (true)
             {
                 var text = accumulated.ToString();
@@ -162,18 +186,18 @@ public sealed class XmppBridgeService : BackgroundService
                 await HandleMessageAsync(stanza, mucJid, ct);
             }
 
-            // Read more data with a short timeout so we can check ct
+            // Read more data with a short timeout so outbound is checked frequently
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(500);
+                cts.CancelAfter(100);
                 var n = await stream.ReadAsync(buf, cts.Token);
                 if (n == 0) throw new EndOfStreamException();
                 accumulated.Append(Encoding.UTF8.GetString(buf, 0, n));
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                // 500ms read timeout — normal, keep looping
+                // read timeout — normal, keep looping
             }
         }
     }
@@ -203,6 +227,21 @@ public sealed class XmppBridgeService : BackgroundService
         await ForwardToRoomAsync(nick, body, ct);
     }
 
+    private async Task ResolveBridgeRoomIdAsync(CancellationToken ct)
+    {
+        if (_bridgeRoomId.HasValue) return;
+        var roomName = _cfg["Xmpp:BridgeRoomName"] ?? "general";
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var room = await db.Rooms
+            .FirstOrDefaultAsync(r => r.Name.ToLower() == roomName.ToLower(), ct);
+        if (room is not null)
+        {
+            _bridgeRoomId = room.Id;
+            _log.LogInformation("XMPP bridge target room resolved: {room} ({id})", room.Name, room.Id);
+        }
+    }
+
     private async Task ForwardToRoomAsync(string xmppNick, string body, CancellationToken ct)
     {
         var roomName = _cfg["Xmpp:BridgeRoomName"] ?? "general";
@@ -221,6 +260,7 @@ public sealed class XmppBridgeService : BackgroundService
                 _log.LogDebug("Bridge target room '{name}' not found — skipping", roomName);
                 return;
             }
+            _bridgeRoomId ??= room.Id;
 
             // Get-or-create the per-sender system user
             var xmppUser = await db.Users

@@ -1,0 +1,115 @@
+- generic:
+  - generic:
+    - generic:
+      - navigation:
+        - link:
+          - /url: /rooms
+          - text: ◈ Chat
+        - generic:
+          - link:
+            - /url: /rooms
+            - text: Public Rooms
+          - link:
+            - /url: /rooms?private=1
+            - text: Private Rooms
+          - link:
+            - /url: /friends
+            - text: Contacts
+          - link:
+            - /url: /sessions
+            - text: Sessions
+        - button:
+          - img
+          - generic: "2"
+        - button:
+          - img
+          - text: alice_diag
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - link:
+                - /url: /rooms
+                - img
+              - generic:
+                - generic:
+                  - generic: "#"
+                  - heading [level=1]: rt-fanout-test
+              - generic:
+                - generic:
+                  - img
+                  - text: "1"
+                - img
+                - button:
+                  - img
+            - generic:
+              - generic:
+                - generic: No messages yet. Say hello!
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - textbox:
+                      - /placeholder: Type a message… (Enter to send, Shift+Enter for newline)
+                  - button:
+                    - img
+                  - button [disabled]:
+                    - img
+        - generic:
+          - generic: My Rooms
+          - generic:
+            - link:
+              - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+              - generic: "#"
+              - generic: general
+            - link:
+              - /url: /rooms/b2137311-3868-4414-8c14-5cde611ef586
+              - generic: "#"
+              - generic: perm-1776636855423
+            - link:
+              - /url: /rooms/1d747568-f526-4775-9b59-09c52a03e523
+              - generic: "#"
+              - generic: rt-fanout-test
+          - generic: Direct Messages
+          - generic:
+            - link:
+              - /url: /dms/6aeb6f77-87cb-4586-ba75-c8b9be9326bd
+              - generic: bob_diag
+          - generic:
+            - link:
+              - /url: /friends
+              - text: Manage contacts →
+    - generic:
+      - generic:
+        - img
+      - button:
+        - img
+  - dialog "#rt-fanout-test — Settings" [ref=e461]:
+    - heading "#rt-fanout-test — Settings" [level=2] [ref=e463]
+    - generic [ref=e464]:
+      - tablist [ref=e465]:
+        - tab "Members" [ref=e466] [cursor=pointer]:
+          - img [ref=e467]
+          - text: Members
+        - tab "Admins" [ref=e469] [cursor=pointer]:
+          - img [ref=e470]
+          - text: Admins
+        - tab "Banned" [ref=e473] [cursor=pointer]:
+          - img [ref=e474]
+          - text: Banned
+        - tab "Settings" [selected] [ref=e477] [cursor=pointer]:
+          - img [ref=e478]
+          - text: Settings
+      - tabpanel "Settings" [ref=e492]:
+        - generic [ref=e493]:
+          - generic [ref=e494]:
+            - paragraph [ref=e495]: Room ID
+            - paragraph [ref=e496]: 1d747568-f526-4775-9b59-09c52a03e523
+          - generic [ref=e497]:
+            - paragraph [ref=e498]: Danger zone
+            - paragraph [ref=e499]: Deleting this room permanently removes all messages and files. Type the room name to confirm.
+            - textbox "rt-fanout-test" [active] [ref=e500]
+            - button "Delete room" [ref=e501] [cursor=pointer]
+    - button "Close" [ref=e487] [cursor=pointer]:
+      - img [ref=e488]
+      - generic [ref=e491]: Close

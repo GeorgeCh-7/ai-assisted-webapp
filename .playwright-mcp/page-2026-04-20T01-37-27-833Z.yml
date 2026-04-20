@@ -1,0 +1,223 @@
+- generic:
+  - generic:
+    - generic:
+      - navigation:
+        - link:
+          - /url: /rooms
+          - text: ◈ Chat
+        - generic:
+          - link:
+            - /url: /rooms
+            - text: Public Rooms
+          - link:
+            - /url: /rooms?private=1
+            - text: Private Rooms
+          - link:
+            - /url: /friends
+            - text: Contacts
+          - link:
+            - /url: /sessions
+            - text: Sessions
+        - button [expanded]:
+          - img
+        - button:
+          - img
+          - text: bobviewer
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - link:
+                - /url: /rooms
+                - img
+              - generic:
+                - generic:
+                  - generic: "#"
+                  - heading [level=1]: general
+              - generic:
+                - generic:
+                  - img
+                  - text: "7"
+                - img
+                - button:
+                  - img
+                - button: leave
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - generic:
+                      - generic: test
+                      - generic: 00:47
+                    - generic: Hi!
+                  - generic:
+                    - button:
+                      - img
+                - generic:
+                  - img
+                  - generic:
+                    - generic:
+                      - generic: alice_diag
+                      - generic: 02:19
+                    - generic: nav-test-X-1
+                  - generic:
+                    - button:
+                      - img
+                - generic:
+                  - img
+                  - generic:
+                    - generic:
+                      - generic: alice_diag
+                      - generic: 02:19
+                    - generic: nav-test-X-2
+                  - generic:
+                    - button:
+                      - img
+                - generic:
+                  - img
+                  - generic:
+                    - generic:
+                      - generic: alice_diag
+                      - generic: 02:19
+                    - generic: nav-test-X-3
+                  - generic:
+                    - button:
+                      - img
+                - generic:
+                  - img
+                  - generic:
+                    - generic:
+                      - generic: alice_diag
+                      - generic: 02:19
+                    - generic: nav-test-X-4
+                  - generic:
+                    - button:
+                      - img
+                - generic:
+                  - img
+                  - generic:
+                    - generic:
+                      - generic: alice_diag
+                      - generic: 02:19
+                    - generic: nav-test-X-5
+                  - generic:
+                    - button:
+                      - img
+                - generic:
+                  - img
+                  - generic:
+                    - generic:
+                      - generic: alice_diag
+                      - generic: 02:20
+                    - generic: nav-test-X-6
+                  - generic:
+                    - button:
+                      - img
+                - generic:
+                  - img
+                  - generic:
+                    - generic:
+                      - generic: alice_diag
+                      - generic: 02:20
+                    - generic: nav-test-X-7
+                  - generic:
+                    - button:
+                      - img
+                - generic:
+                  - img
+                  - generic:
+                    - generic:
+                      - generic: alice_diag
+                      - generic: 02:20
+                    - generic: nav-test-X-8
+                  - generic:
+                    - button:
+                      - img
+                - generic:
+                  - img
+                  - generic:
+                    - generic:
+                      - generic: alice_diag
+                      - generic: 02:20
+                    - generic: nav-test-X-9
+                  - generic:
+                    - button:
+                      - img
+                - generic:
+                  - img
+                  - generic:
+                    - generic:
+                      - generic: alice_diag
+                      - generic: 02:20
+                    - generic: nav-test-X-10
+                  - generic:
+                    - button:
+                      - img
+                - generic:
+                  - img
+                  - generic:
+                    - generic:
+                      - generic: gajim-user-a
+                      - generic: via Jabber
+                      - generic: 03:59
+                    - generic: Hello from XMPP! Bridge test.
+                  - generic:
+                    - button:
+                      - img
+                - generic:
+                  - img
+                  - generic:
+                    - generic:
+                      - generic: testbridge
+                      - generic: 04:18
+                    - generic: Hello back from the app — bidirectional test!
+                  - generic:
+                    - button:
+                      - img
+                - generic:
+                  - img
+                  - generic:
+                    - generic:
+                      - generic: avatartest
+                      - generic: 05:18
+                    - generic: Avatar test message — custom photo should appear in other users' views
+                  - generic:
+                    - button:
+                      - img
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic: 05:27
+                  - generic:
+                    - button:
+                      - img
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - textbox:
+                      - /placeholder: Type a message… (Enter to send, Shift+Enter for newline)
+                  - button:
+                    - img
+                  - button [disabled]:
+                    - img
+        - generic:
+          - generic: My Rooms
+          - generic:
+            - link:
+              - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+              - generic: "#"
+              - generic: general
+          - generic: Direct Messages
+          - generic:
+            - link:
+              - /url: /friends
+              - text: Manage contacts →
+    - generic:
+      - generic:
+        - img
+      - button:
+        - img
+  - menu [active] [ref=e305]:
+    - generic [ref=e306]: No pending invitations

@@ -1,0 +1,198 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - navigation [ref=e4]:
+      - link "◈ Chat" [ref=e5] [cursor=pointer]:
+        - /url: /rooms
+      - generic [ref=e6]:
+        - link "Public Rooms" [ref=e7] [cursor=pointer]:
+          - /url: /rooms
+        - link "Private Rooms" [ref=e8] [cursor=pointer]:
+          - /url: /rooms?private=1
+        - link "Contacts" [ref=e9] [cursor=pointer]:
+          - /url: /friends
+        - link "Sessions" [ref=e10] [cursor=pointer]:
+          - /url: /sessions
+      - button [ref=e11] [cursor=pointer]:
+        - img
+      - button "bobviewer bobviewer" [ref=e12] [cursor=pointer]:
+        - img "bobviewer" [ref=e13]
+        - text: bobviewer
+    - generic [ref=e14]:
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - link "Back to rooms" [ref=e18] [cursor=pointer]:
+            - /url: /rooms
+            - img [ref=e19]
+          - generic [ref=e22]:
+            - generic [ref=e23]: "#"
+            - heading "general" [level=1] [ref=e149]
+            - generic "Connected" [ref=e150]
+          - generic [ref=e26]:
+            - generic [ref=e151]:
+              - img [ref=e152]
+              - text: "7"
+            - img [ref=e157]
+            - button "Room settings" [ref=e161] [cursor=pointer]:
+              - img
+            - button "leave" [ref=e162] [cursor=pointer]
+        - generic [ref=e36]:
+          - generic [ref=e163]:
+            - img "test" [ref=e164]
+            - generic [ref=e165]:
+              - generic [ref=e166]:
+                - generic [ref=e167]: test
+                - generic "offline" [ref=e168]
+                - generic [ref=e169]: 00:47
+              - generic [ref=e170]: Hi!
+            - button "Message actions" [ref=e172] [cursor=pointer]:
+              - img
+          - generic [ref=e173]:
+            - img "alice_diag" [ref=e174]
+            - generic [ref=e175]:
+              - generic [ref=e176]:
+                - generic [ref=e177]: alice_diag
+                - generic "offline" [ref=e178]
+                - generic [ref=e179]: 02:19
+              - generic [ref=e180]: nav-test-X-1
+            - button "Message actions" [ref=e182] [cursor=pointer]:
+              - img
+          - generic [ref=e183]:
+            - img "alice_diag" [ref=e184]
+            - generic [ref=e185]:
+              - generic [ref=e186]:
+                - generic [ref=e187]: alice_diag
+                - generic "offline" [ref=e188]
+                - generic [ref=e189]: 02:19
+              - generic [ref=e190]: nav-test-X-2
+            - button "Message actions" [ref=e192] [cursor=pointer]:
+              - img
+          - generic [ref=e193]:
+            - img "alice_diag" [ref=e194]
+            - generic [ref=e195]:
+              - generic [ref=e196]:
+                - generic [ref=e197]: alice_diag
+                - generic "offline" [ref=e198]
+                - generic [ref=e199]: 02:19
+              - generic [ref=e200]: nav-test-X-3
+            - button "Message actions" [ref=e202] [cursor=pointer]:
+              - img
+          - generic [ref=e203]:
+            - img "alice_diag" [ref=e204]
+            - generic [ref=e205]:
+              - generic [ref=e206]:
+                - generic [ref=e207]: alice_diag
+                - generic "offline" [ref=e208]
+                - generic [ref=e209]: 02:19
+              - generic [ref=e210]: nav-test-X-4
+            - button "Message actions" [ref=e212] [cursor=pointer]:
+              - img
+          - generic [ref=e213]:
+            - img "alice_diag" [ref=e214]
+            - generic [ref=e215]:
+              - generic [ref=e216]:
+                - generic [ref=e217]: alice_diag
+                - generic "offline" [ref=e218]
+                - generic [ref=e219]: 02:19
+              - generic [ref=e220]: nav-test-X-5
+            - button "Message actions" [ref=e222] [cursor=pointer]:
+              - img
+          - generic [ref=e223]:
+            - img "alice_diag" [ref=e224]
+            - generic [ref=e225]:
+              - generic [ref=e226]:
+                - generic [ref=e227]: alice_diag
+                - generic "offline" [ref=e228]
+                - generic [ref=e229]: 02:20
+              - generic [ref=e230]: nav-test-X-6
+            - button "Message actions" [ref=e232] [cursor=pointer]:
+              - img
+          - generic [ref=e233]:
+            - img "alice_diag" [ref=e234]
+            - generic [ref=e235]:
+              - generic [ref=e236]:
+                - generic [ref=e237]: alice_diag
+                - generic "offline" [ref=e238]
+                - generic [ref=e239]: 02:20
+              - generic [ref=e240]: nav-test-X-7
+            - button "Message actions" [ref=e242] [cursor=pointer]:
+              - img
+          - generic [ref=e243]:
+            - img "alice_diag" [ref=e244]
+            - generic [ref=e245]:
+              - generic [ref=e246]:
+                - generic [ref=e247]: alice_diag
+                - generic "offline" [ref=e248]
+                - generic [ref=e249]: 02:20
+              - generic [ref=e250]: nav-test-X-8
+            - button "Message actions" [ref=e252] [cursor=pointer]:
+              - img
+          - generic [ref=e253]:
+            - img "alice_diag" [ref=e254]
+            - generic [ref=e255]:
+              - generic [ref=e256]:
+                - generic [ref=e257]: alice_diag
+                - generic "offline" [ref=e258]
+                - generic [ref=e259]: 02:20
+              - generic [ref=e260]: nav-test-X-9
+            - button "Message actions" [ref=e262] [cursor=pointer]:
+              - img
+          - generic [ref=e263]:
+            - img "alice_diag" [ref=e264]
+            - generic [ref=e265]:
+              - generic [ref=e266]:
+                - generic [ref=e267]: alice_diag
+                - generic "offline" [ref=e268]
+                - generic [ref=e269]: 02:20
+              - generic [ref=e270]: nav-test-X-10
+            - button "Message actions" [ref=e272] [cursor=pointer]:
+              - img
+          - generic [ref=e273]:
+            - img "gajim-user-a" [ref=e274]
+            - generic [ref=e275]:
+              - generic [ref=e276]:
+                - generic [ref=e277]: gajim-user-a
+                - generic [ref=e278]: via Jabber
+                - generic "offline" [ref=e279]
+                - generic [ref=e280]: 03:59
+              - generic [ref=e281]: Hello from XMPP! Bridge test.
+            - button "Message actions" [ref=e283] [cursor=pointer]:
+              - img
+          - generic [ref=e284]:
+            - img "testbridge" [ref=e285]
+            - generic [ref=e286]:
+              - generic [ref=e287]:
+                - generic [ref=e288]: testbridge
+                - generic "offline" [ref=e289]
+                - generic [ref=e290]: 04:18
+              - generic [ref=e291]: Hello back from the app — bidirectional test!
+            - button "Message actions" [ref=e293] [cursor=pointer]:
+              - img
+          - generic [ref=e294]:
+            - img "avatartest" [ref=e295]
+            - generic [ref=e296]:
+              - generic [ref=e297]:
+                - generic [ref=e298]: avatartest
+                - generic "offline" [ref=e299]
+                - generic [ref=e300]: 05:18
+              - generic [ref=e301]: Avatar test message — custom photo should appear in other users' views
+            - button "Message actions" [ref=e303] [cursor=pointer]:
+              - img
+        - generic [ref=e40]:
+          - textbox "Type a message… (Enter to send, Shift+Enter for newline)" [ref=e42]
+          - button "Attach file" [ref=e304] [cursor=pointer]:
+            - img
+          - button "Send message" [disabled]:
+            - img
+      - generic [ref=e43]:
+        - generic [ref=e44]: My Rooms
+        - link "# general" [ref=e305] [cursor=pointer]:
+          - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+          - generic [ref=e306]: "#"
+          - generic [ref=e307]: general
+        - generic [ref=e47]: Direct Messages
+        - link "Manage contacts →" [ref=e49] [cursor=pointer]:
+          - /url: /friends
+  - generic [ref=e50]:
+    - img [ref=e52]
+    - button "Open Tanstack query devtools" [ref=e100] [cursor=pointer]:
+      - img [ref=e101]

@@ -3,6 +3,7 @@ using System.Text;
 using Api.Data;
 using Api.Domain;
 using Api.Features.Presence;
+using Api.Features.XmppBridge;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -16,11 +17,13 @@ public class ChatHub : Hub
 {
     private readonly AppDbContext _db;
     private readonly PresenceService _presence;
+    private readonly XmppBridgeService _xmpp;
 
-    public ChatHub(AppDbContext db, PresenceService presence)
+    public ChatHub(AppDbContext db, PresenceService presence, XmppBridgeService xmpp)
     {
         _db = db;
         _presence = presence;
+        _xmpp = xmpp;
     }
 
     public override async Task OnConnectedAsync()
@@ -183,11 +186,28 @@ public class ChatHub : Hub
                     .FirstAsync(m => m.Id == args.IdempotencyKey);
             }
 
+            var attachedFiles = new List<FileAttachment>();
+            if (args.AttachmentFileIds is { Length: > 0 })
+            {
+                attachedFiles = await _db.FileAttachments
+                    .Where(f => args.AttachmentFileIds.Contains(f.Id) && f.UploaderId == userId)
+                    .ToListAsync();
+                foreach (var f in attachedFiles)
+                    f.MessageId = msg.Id;
+                if (attachedFiles.Count > 0)
+                    await _db.SaveChangesAsync();
+            }
+
             var author = await _db.Users.FindAsync(userId);
-            var payload = MessagePayload(msg, author?.UserName ?? "[deleted user]");
+            var payload = MessagePayload(msg, author?.UserName ?? "[deleted user]", attachedFiles);
 
             await Clients.Group(GroupName(args.RoomId)).SendAsync("MessageReceived", payload);
             await IncrementUnreadsAsync(args.RoomId, userId, msg.Id);
+
+            // Forward to XMPP MUC if this is the bridge room and not a bridge-sourced message
+            var senderName = author?.UserName ?? "";
+            if (_xmpp.BridgeRoomId == args.RoomId && !senderName.StartsWith("xmpp:"))
+                _xmpp.TryEnqueueOutbound(senderName, args.Content);
 
             return payload;
         }
@@ -212,14 +232,25 @@ public class ChatHub : Hub
 
     private async Task BroadcastPresenceToRoomsAsync(Guid userId, string status)
     {
+        var payload = new { userId = userId.ToString(), status };
+
         var roomIds = await _db.RoomMemberships
             .Where(m => m.UserId == userId)
             .Select(m => m.RoomId)
             .ToListAsync();
 
-        var payload = new { userId = userId.ToString(), status };
         foreach (var roomId in roomIds)
             await Clients.Group(GroupName(roomId)).SendAsync("PresenceChanged", payload);
+
+        // Also notify friends directly via their personal group so presence updates
+        // arrive regardless of which page the friend is currently viewing.
+        var friendIds = await _db.Friendships
+            .Where(f => (f.UserAId == userId || f.UserBId == userId) && f.Status == "accepted")
+            .Select(f => f.UserAId == userId ? f.UserBId : f.UserAId)
+            .ToListAsync();
+
+        foreach (var friendId in friendIds)
+            await Clients.Group($"user-{friendId}").SendAsync("PresenceChanged", payload);
     }
 
     private async Task<long> NextWatermarkAsync(Guid roomId)
@@ -273,6 +304,11 @@ public class ChatHub : Hub
 
         try { await _db.SaveChangesAsync(); }
         catch { /* unread increment is best-effort */ }
+
+        // Notify each non-sender member so their catalog badge updates in real-time
+        var roomIdStr = roomId.ToString();
+        foreach (var memberId in memberIds)
+            await Clients.Group($"user-{memberId}").SendAsync("RoomUnreadUpdated", new { roomId = roomIdStr });
     }
 
     // --- Phase 2 hub stubs ---
@@ -491,8 +527,20 @@ public class ChatHub : Hub
                     .FirstAsync(m => m.Id == args.IdempotencyKey);
             }
 
+            var attachedFiles = new List<FileAttachment>();
+            if (args.AttachmentFileIds is { Length: > 0 })
+            {
+                attachedFiles = await _db.FileAttachments
+                    .Where(f => args.AttachmentFileIds.Contains(f.Id) && f.UploaderId == userId)
+                    .ToListAsync();
+                foreach (var f in attachedFiles)
+                    f.DmMessageId = msg.Id;
+                if (attachedFiles.Count > 0)
+                    await _db.SaveChangesAsync();
+            }
+
             var author = await _db.Users.FindAsync(userId);
-            var payload = DmMessagePayload(msg, author?.UserName ?? "[deleted user]");
+            var payload = DmMessagePayload(msg, author?.UserName ?? "[deleted user]", attachedFiles);
 
             await Clients.Group(DmGroupName(args.ThreadId)).SendAsync("DirectMessageReceived", payload);
             await IncrementDmUnreadsAsync(args.ThreadId, userId, msg.Id);
@@ -576,7 +624,7 @@ public class ChatHub : Hub
         }
     }
 
-    private static object MessagePayload(Message msg, string authorUsername) => new
+    private static object MessagePayload(Message msg, string authorUsername, IEnumerable<FileAttachment>? attachments = null) => new
     {
         id = msg.Id.ToString(),
         roomId = msg.RoomId.ToString(),
@@ -589,10 +637,16 @@ public class ChatHub : Hub
         editedAt = msg.EditedAt,
         deletedAt = msg.DeletedAt,
         replyToMessageId = msg.ReplyToMessageId?.ToString(),
-        attachments = Array.Empty<object>(),
+        attachments = (attachments ?? []).Select(a => new
+        {
+            id = a.Id.ToString(),
+            originalFilename = a.OriginalFilename,
+            contentType = a.ContentType,
+            sizeBytes = a.SizeBytes,
+        }).ToArray(),
     };
 
-    private static object DmMessagePayload(DmMessage msg, string authorUsername) => new
+    private static object DmMessagePayload(DmMessage msg, string authorUsername, IEnumerable<FileAttachment>? attachments = null) => new
     {
         id = msg.Id.ToString(),
         dmThreadId = msg.DmThreadId.ToString(),
@@ -605,7 +659,13 @@ public class ChatHub : Hub
         editedAt = msg.EditedAt,
         deletedAt = msg.DeletedAt,
         replyToMessageId = msg.ReplyToMessageId?.ToString(),
-        attachments = Array.Empty<object>(),
+        attachments = (attachments ?? []).Select(a => new
+        {
+            id = a.Id.ToString(),
+            originalFilename = a.OriginalFilename,
+            contentType = a.ContentType,
+            sizeBytes = a.SizeBytes,
+        }).ToArray(),
     };
 
     private async Task<long> NextDmWatermarkAsync(Guid threadId)
@@ -652,6 +712,9 @@ public class ChatHub : Hub
 
         try { await _db.SaveChangesAsync(); }
         catch { /* best-effort */ }
+
+        // Notify recipient so their DM sidebar badge updates in real-time
+        await Clients.Group($"user-{recipientId}").SendAsync("DmUnreadUpdated", new { threadId = threadId.ToString() });
     }
 }
 

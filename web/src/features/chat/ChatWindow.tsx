@@ -4,7 +4,7 @@ import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Settings, Users, Wifi, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useMe } from '@/features/auth/useAuth'
-import { useRoom, useLeaveRoom } from '@/features/rooms/useRooms'
+import { useRoom, useLeaveRoom, useRoomMembers } from '@/features/rooms/useRooms'
 import { useSignalR, type HubLike } from './useSignalR'
 import { useMessageHistory, useSendMessage } from './useMessages'
 import MessageList from './MessageList'
@@ -23,6 +23,7 @@ export default function ChatWindow() {
   const { roomId = '' } = useParams<{ roomId: string }>()
   const { data: me } = useMe()
   const { data: room } = useRoom(roomId)
+  useRoomMembers(roomId)
   const { mutate: leaveRoom, isPending: leaving } = useLeaveRoom()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [replyCtx, setReplyCtx] = useState<ReplyCtx | null>(null)

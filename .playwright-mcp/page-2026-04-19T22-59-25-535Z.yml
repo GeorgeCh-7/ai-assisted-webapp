@@ -1,0 +1,29 @@
+- generic [ref=e2]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]: Sign in
+      - generic [ref=e8]: Enter your email and password to continue
+    - generic [ref=e9]:
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - text: Email
+          - textbox "Email" [active] [ref=e12]:
+            - /placeholder: you@example.com
+            - text: alice_diag
+        - generic [ref=e13]:
+          - text: Password
+          - textbox "Password" [ref=e14]:
+            - /placeholder: ••••••
+            - text: Password1!
+        - generic [ref=e15] [cursor=pointer]:
+          - checkbox "Keep me signed in" [ref=e16]
+          - text: Keep me signed in
+        - button "Sign in" [ref=e17] [cursor=pointer]
+      - paragraph [ref=e18]:
+        - text: No account?
+        - link "Register" [ref=e19] [cursor=pointer]:
+          - /url: /register
+  - generic [ref=e20]:
+    - img [ref=e22]
+    - button "Open Tanstack query devtools" [ref=e70] [cursor=pointer]:
+      - img [ref=e71]

@@ -1,0 +1,70 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - navigation [ref=e5]:
+      - link "◈ Chat" [ref=e6] [cursor=pointer]:
+        - /url: /rooms
+      - generic [ref=e7]:
+        - link "Public Rooms" [ref=e8] [cursor=pointer]:
+          - /url: /rooms
+        - link "Private Rooms" [ref=e9] [cursor=pointer]:
+          - /url: /rooms?private=1
+        - link "Contacts" [ref=e10] [cursor=pointer]:
+          - /url: /friends
+        - link "Sessions" [ref=e11] [cursor=pointer]:
+          - /url: /sessions
+      - button "2" [ref=e12] [cursor=pointer]:
+        - img
+        - generic [ref=e13]: "2"
+      - button "alice_diag" [ref=e14] [cursor=pointer]:
+        - img
+        - text: alice_diag
+    - generic [ref=e15]:
+      - generic [ref=e240]:
+        - generic [ref=e241]:
+          - link "Back to rooms" [ref=e242] [cursor=pointer]:
+            - /url: /rooms
+            - img [ref=e243]
+          - generic [ref=e246]:
+            - generic [ref=e247]: "#"
+            - heading "slice3-realtime-test" [level=1] [ref=e248]
+            - generic "Connected" [ref=e249]
+          - generic [ref=e250]:
+            - generic [ref=e251]:
+              - img [ref=e252]
+              - text: "1"
+            - img [ref=e257]
+            - button "Room settings" [ref=e261] [cursor=pointer]:
+              - img
+        - generic [ref=e265]: No messages yet. Say hello!
+        - generic [ref=e268]:
+          - textbox "Type a message… (Enter to send, Shift+Enter for newline)" [ref=e270]
+          - button "Attach file" [ref=e271] [cursor=pointer]:
+            - img
+          - button "Send message" [disabled]:
+            - img
+      - generic [ref=e103]:
+        - generic [ref=e104]: My Rooms
+        - generic [ref=e105]:
+          - link "# general" [ref=e106] [cursor=pointer]:
+            - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+            - generic [ref=e107]: "#"
+            - generic [ref=e108]: general
+          - link "# perm-1776636855423" [ref=e109] [cursor=pointer]:
+            - /url: /rooms/b2137311-3868-4414-8c14-5cde611ef586
+            - generic [ref=e110]: "#"
+            - generic [ref=e111]: perm-1776636855423
+          - link "# slice3-realtime-test" [ref=e272] [cursor=pointer]:
+            - /url: /rooms/8893d6ea-2324-4ad9-88f8-98fc78d643e3
+            - generic [ref=e273]: "#"
+            - generic [ref=e274]: slice3-realtime-test
+        - generic [ref=e112]: Direct Messages
+        - link "offline bob_diag" [ref=e114] [cursor=pointer]:
+          - /url: /dms/6aeb6f77-87cb-4586-ba75-c8b9be9326bd
+          - generic "offline" [ref=e115]
+          - generic [ref=e116]: bob_diag
+        - link "Manage contacts →" [ref=e118] [cursor=pointer]:
+          - /url: /friends
+  - generic [ref=e119]:
+    - img [ref=e121]
+    - button "Open Tanstack query devtools" [ref=e169] [cursor=pointer]:
+      - img [ref=e170]

@@ -11,8 +11,14 @@ listen:
     max_stanza_size: 262144
     shaper: c2s_shaper
     access: c2s
-    # TLS is offered but not required; bridge connects over plain TCP inside docker
+    # TLS offered but not required; bridge connects over plain TCP inside docker
     starttls_required: false
+
+  -
+    port: 5269
+    ip: "::"
+    module: ejabberd_s2s_in
+    max_stanza_size: 524288
 
   -
     port: 5280
@@ -20,6 +26,10 @@ listen:
     module: ejabberd_http
     request_handlers:
       /api: mod_http_api
+
+# No TLS for S2S — safe inside docker bridge network
+s2s_use_starttls: false
+s2s_access: s2s
 
 # Allow PLAIN SASL on unencrypted connections (safe inside docker network)
 disable_sasl_mechanisms: []
@@ -50,6 +60,8 @@ access_rules:
   c2s:
     deny: blocked
     allow: all
+  s2s:
+    allow: all
   register:
     allow: all
 
@@ -63,6 +75,8 @@ shaper_rules:
   c2s_shaper:
     none: admin
     normal: all
+  s2s_shaper:
+    none: all
 
 auth_method:
   - internal
@@ -74,7 +88,7 @@ modules:
   mod_last: {}
   mod_muc:
     access:
-      - allow: local
+      - allow: all   # allow federated users to join rooms
     access_create: local
     access_persistent: local
     default_room_options:
@@ -86,6 +100,7 @@ modules:
   mod_register:
     access: register
   mod_roster: {}
+  mod_s2s_dialback: {}
   mod_stream_mgmt: {}
   mod_vcard: {}
   mod_version:

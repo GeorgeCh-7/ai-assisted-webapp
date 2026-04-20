@@ -16,10 +16,12 @@ Two users in separate browser profiles see rooms, DMs, invitations, friend reque
 - Mode: no contracts-first split, no parallel worktrees. Phase 2's 13-slice dependency-ordered plan was the right shape at 12–15h; Phase 3's surface is small and tightly sequenced, so coordination overhead is the wrong trade.
 - Priority tagging is **pre-committed** (unlike Phase 2's "no cuts, dependency order decides"). XMPP variance is high and agents have unfamiliar priors; hard P0/P1/P2 tags prevent sunk-cost escalation.
 
-### Explicitly out of scope for Phase 3
+### Explicitly out of scope for Phase 3 (original)
 
-- Server-to-server XMPP federation (any form — not ejabberd-to-ejabberd, not ejabberd-to-public XMPP server).
-- Admin dashboard. Dashboard's brief value was federation stats; with federation cut, dashboard is cargo-cult.
+The following were cut at the start of Phase 3. Items marked ~~strikethrough~~ shipped anyway as stretch work.
+
+- ~~Server-to-server XMPP federation (ejabberd-to-ejabberd)~~ — **shipped as bonus**: a second ejabberd service (`ejabberd-fed`, domain `fed.local`) with S2S dialback; `gajim-user-fed@fed.local` can join the `chat.local` MUC bridge. Federation to external public XMPP servers (e.g. `jabber.org`) is still out of scope.
+- Admin dashboard. Dashboard's brief value was federation stats; with the demo relying on Gajim directly it adds nothing.
 - Phase 3 Playwright tests for the new hub events. Manual demo-script verification across two browser profiles is the safety net.
 - Rate limiting, metrics, distributed tracing.
 - Avatar / profile editing.
@@ -187,6 +189,11 @@ The tier is decided **once**, at Slice 7 start, and does not downgrade based on 
 - **(a)** XMPP cut entirely. Update `roadmap.md` to note Phase 3 did not deliver Jabber.
 
 Each fall-back step is one-way: once you drop from (d) to (c), do not attempt to climb back to (d).
+
+**Actual outcome:** landed at **(d) bidirectional** plus bonus S2S federation. Key implementation details not covered in the original spec:
+- DNS: Erlang's `inet_res` (not Alpine musl) pointed at Docker embedded DNS (127.0.0.11) via `ejabberd/inetrc`. Alpine musl `getaddrinfo` silently fails on `.local` Docker aliases.
+- MUC subdomain aliases: `conference.chat.local` and `conference.fed.local` must be explicit Docker network aliases — they are not auto-derived from the ejabberd host alias. Without them, `xmpp_stream_out` A-record fallback returns NXDOMAIN.
+- Second ejabberd: `ejabberd/ejabberd-fed.yml` + `ejabberd-fed` service in docker-compose with static IP `172.26.0.11`; primary at `172.26.0.10`. IPAM subnet `172.26.0.0/24` required for static IP assignment.
 
 ---
 

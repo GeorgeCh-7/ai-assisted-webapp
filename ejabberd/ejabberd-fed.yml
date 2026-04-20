@@ -1,0 +1,106 @@
+hosts:
+  - "fed.local"
+
+loglevel: warning
+
+listen:
+  -
+    port: 5222
+    ip: "::"
+    module: ejabberd_c2s
+    max_stanza_size: 262144
+    shaper: c2s_shaper
+    access: c2s
+    starttls_required: false
+
+  -
+    port: 5269
+    ip: "::"
+    module: ejabberd_s2s_in
+    max_stanza_size: 524288
+
+  -
+    port: 5280
+    ip: "::"
+    module: ejabberd_http
+    request_handlers:
+      /api: mod_http_api
+
+# No TLS for S2S — safe inside docker bridge network
+s2s_use_starttls: false
+s2s_access: s2s
+
+disable_sasl_mechanisms: []
+
+acl:
+  admin:
+    user:
+      - "admin": "fed.local"
+  local:
+    user_regexp: ""
+  loopback:
+    ip:
+      - "127.0.0.0/8"
+      - "::1/128"
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
+
+api_permissions:
+  "admin access":
+    who:
+      acl: loopback
+    what: "*"
+
+access_rules:
+  local:
+    allow: local
+  c2s:
+    deny: blocked
+    allow: all
+  s2s:
+    allow: all
+  register:
+    allow: all
+
+shaper:
+  normal:
+    rate: 3000
+    burst_size: 20000
+
+shaper_rules:
+  max_user_sessions: 10
+  c2s_shaper:
+    none: admin
+    normal: all
+  s2s_shaper:
+    none: all
+
+auth_method:
+  - internal
+
+modules:
+  mod_adhoc: {}
+  mod_caps: {}
+  mod_disco: {}
+  mod_last: {}
+  mod_muc:
+    access:
+      - allow: all
+    access_create: local
+    access_persistent: local
+    default_room_options:
+      persistent: true
+      public: true
+  mod_ping: {}
+  mod_privacy: {}
+  mod_private: {}
+  mod_register:
+    access: register
+  mod_roster: {}
+  mod_s2s_dialback: {}
+  mod_stream_mgmt: {}
+  mod_vcard: {}
+  mod_version:
+    show_os: false
+  mod_http_api: {}

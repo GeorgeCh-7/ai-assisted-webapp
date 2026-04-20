@@ -1,0 +1,110 @@
+- generic:
+  - generic:
+    - generic:
+      - navigation:
+        - link:
+          - /url: /rooms
+          - text: ◈ Chat
+        - generic:
+          - link:
+            - /url: /rooms
+            - text: Public Rooms
+          - link:
+            - /url: /rooms?private=1
+            - text: Private Rooms
+          - link:
+            - /url: /friends
+            - text: Contacts
+          - link:
+            - /url: /sessions
+            - text: Sessions
+        - button:
+          - img
+          - generic: "2"
+        - button:
+          - img
+          - text: alice_diag
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - link:
+                - /url: /rooms
+                - img
+              - generic:
+                - generic:
+                  - generic: "#"
+                  - heading [level=1]: slice3-realtime-test
+              - generic:
+                - generic:
+                  - img
+                  - text: "1"
+                - img
+                - button:
+                  - img
+            - generic:
+              - generic:
+                - generic: No messages yet. Say hello!
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - textbox:
+                      - /placeholder: Type a message… (Enter to send, Shift+Enter for newline)
+                  - button:
+                    - img
+                  - button [disabled]:
+                    - img
+        - generic:
+          - generic: My Rooms
+          - generic:
+            - link:
+              - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+              - generic: "#"
+              - generic: general
+            - link:
+              - /url: /rooms/b2137311-3868-4414-8c14-5cde611ef586
+              - generic: "#"
+              - generic: perm-1776636855423
+            - link:
+              - /url: /rooms/8893d6ea-2324-4ad9-88f8-98fc78d643e3
+              - generic: "#"
+              - generic: slice3-realtime-test
+          - generic: Direct Messages
+          - generic:
+            - link:
+              - /url: /dms/6aeb6f77-87cb-4586-ba75-c8b9be9326bd
+              - generic: bob_diag
+          - generic:
+            - link:
+              - /url: /friends
+              - text: Manage contacts →
+    - generic:
+      - generic:
+        - img
+      - button:
+        - img
+  - dialog "#slice3-realtime-test — Settings" [ref=e276]:
+    - heading "#slice3-realtime-test — Settings" [level=2] [ref=e278]
+    - generic [ref=e279]:
+      - tablist [ref=e280]:
+        - tab "Members" [selected] [ref=e281] [cursor=pointer]:
+          - img [ref=e282]
+          - text: Members
+        - tab "Admins" [ref=e284] [cursor=pointer]:
+          - img [ref=e285]
+          - text: Admins
+        - tab "Banned" [ref=e288] [cursor=pointer]:
+          - img [ref=e289]
+          - text: Banned
+        - tab "Settings" [ref=e292] [cursor=pointer]:
+          - img [ref=e293]
+          - text: Settings
+      - tabpanel "Members" [active] [ref=e296]:
+        - generic [ref=e298]:
+          - generic "online" [ref=e299]
+          - generic [ref=e300]: alice_diag
+          - generic [ref=e301]: owner
+    - button "Close" [ref=e302] [cursor=pointer]:
+      - img [ref=e303]
+      - generic [ref=e306]: Close

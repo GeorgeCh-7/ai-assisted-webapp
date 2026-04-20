@@ -1,13 +1,15 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useHubContext } from './HubProvider'
 import type { PresenceStatus } from '@/features/presence/usePresence'
+import { incrementUnread } from '@/hooks/useUnread'
 
 export function useGlobalHubEvents() {
   const { hub } = useHubContext()
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     if (!hub) return
@@ -50,6 +52,16 @@ export function useGlobalHubEvents() {
     const handleDmThreadCreated = () => {
       qc.invalidateQueries({ queryKey: ['dms'] })
     }
+    const handleRoomUnreadUpdated = (payload: unknown) => {
+      const { roomId } = payload as { roomId: string }
+      // Skip increment if user is currently viewing that room (useSignalR handles it there)
+      if (!location.pathname.includes(roomId)) {
+        incrementUnread(qc, roomId)
+      }
+    }
+    const handleDmUnreadUpdated = () => {
+      qc.invalidateQueries({ queryKey: ['dms'] })
+    }
 
     hub.on('FriendRequestReceived', handleFriendRequestReceived)
     hub.on('FriendRequestAccepted', handleFriendRequestAccepted)
@@ -62,6 +74,8 @@ export function useGlobalHubEvents() {
     hub.on('RoomCreated', handleRoomCreated)
     hub.on('RoomDeleted', handleRoomDeletedGlobal)
     hub.on('DmThreadCreated', handleDmThreadCreated)
+    hub.on('RoomUnreadUpdated', handleRoomUnreadUpdated)
+    hub.on('DmUnreadUpdated', handleDmUnreadUpdated)
 
     return () => {
       hub.off('FriendRequestReceived', handleFriendRequestReceived)
@@ -75,6 +89,8 @@ export function useGlobalHubEvents() {
       hub.off('RoomCreated', handleRoomCreated)
       hub.off('RoomDeleted', handleRoomDeletedGlobal)
       hub.off('DmThreadCreated', handleDmThreadCreated)
+      hub.off('RoomUnreadUpdated', handleRoomUnreadUpdated)
+      hub.off('DmUnreadUpdated', handleDmUnreadUpdated)
     }
-  }, [hub, qc, navigate])
+  }, [hub, qc, navigate, location.pathname])
 }

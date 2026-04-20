@@ -47,10 +47,7 @@ public static class FileEndpoints
         if (string.IsNullOrWhiteSpace(scope) || string.IsNullOrWhiteSpace(scopeIdStr))
             return Results.BadRequest(new { error = "Scope id required" });
 
-        if (!Guid.TryParse(scopeIdStr, out var scopeId))
-            return Results.BadRequest(new { error = "Invalid scope id" });
-
-        // Size validation: 3 MB for images, 20 MB for everything else
+        // Size validation first: 3 MB for images, 20 MB for everything else
         const long MaxImageBytes = 3L * 1024 * 1024;
         const long MaxFileBytes = 20L * 1024 * 1024;
         var contentType = file.ContentType ?? "application/octet-stream";
@@ -63,6 +60,9 @@ public static class FileEndpoints
                 ? Results.Json(new { error = "Image exceeds 3 MB" }, statusCode: 413)
                 : Results.Json(new { error = "File exceeds 20 MB" }, statusCode: 413);
         }
+
+        if (!Guid.TryParse(scopeIdStr, out var scopeId))
+            return Results.BadRequest(new { error = "Invalid scope id" });
 
         // Verify caller is a member of the scope
         Guid? roomId = null;

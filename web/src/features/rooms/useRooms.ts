@@ -1,6 +1,21 @@
+import { useEffect } from 'react'
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { RoomDto, PagedRoomsResponse } from './types'
+import type { PresenceStatus } from '@/features/presence/usePresence'
+
+type MemberDto = {
+  userId: string
+  username: string
+  role: string
+  joinedAt: string
+  presence: PresenceStatus
+}
+
+type MembersResponse = {
+  items: MemberDto[]
+  nextCursor: string | null
+}
 
 export function useRooms(q = '', onlyPrivate = false, mine = false) {
   return useInfiniteQuery({
@@ -47,6 +62,23 @@ export function useLeaveRoom() {
       qc.invalidateQueries({ queryKey: ['room', roomId] })
     },
   })
+}
+
+export function useRoomMembers(roomId: string) {
+  const qc = useQueryClient()
+  const query = useQuery({
+    queryKey: ['room-members', roomId],
+    queryFn: () => api.get<MembersResponse>(`/api/rooms/${roomId}/members`),
+    enabled: !!roomId,
+  })
+  const members = query.data?.items
+  useEffect(() => {
+    if (!members) return
+    for (const m of members) {
+      qc.setQueryData<PresenceStatus>(['presence', m.userId], m.presence)
+    }
+  }, [members, qc])
+  return query
 }
 
 export function useCreateRoom() {

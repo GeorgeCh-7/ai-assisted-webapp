@@ -1,0 +1,110 @@
+- generic [ref=e2]:
+  - generic [ref=e103]:
+    - navigation [ref=e104]:
+      - link "◈ Chat" [ref=e105] [cursor=pointer]:
+        - /url: /rooms
+      - generic [ref=e106]:
+        - link "Public Rooms" [ref=e107] [cursor=pointer]:
+          - /url: /rooms
+        - link "Private Rooms" [ref=e108] [cursor=pointer]:
+          - /url: /rooms?private=1
+        - link "Contacts" [ref=e109] [cursor=pointer]:
+          - /url: /friends
+        - link "Sessions" [ref=e110] [cursor=pointer]:
+          - /url: /sessions
+      - button "2" [ref=e111] [cursor=pointer]:
+        - img
+        - generic [ref=e112]: "2"
+      - button "alice_diag" [ref=e113] [cursor=pointer]:
+        - img
+        - text: alice_diag
+    - generic [ref=e114]:
+      - generic [ref=e116]:
+        - generic [ref=e118]:
+          - generic [ref=e119]:
+            - heading "Public Rooms" [level=1] [ref=e120]
+            - paragraph [ref=e121]: 7 rooms
+          - button "New room" [ref=e122] [cursor=pointer]:
+            - img
+            - text: New room
+        - generic [ref=e125]:
+          - img
+          - textbox "filter rooms…" [ref=e126]
+        - generic [ref=e128]:
+          - generic [ref=e129]: room
+          - generic [ref=e130]: users
+        - generic [ref=e132]:
+          - generic [ref=e133]:
+            - generic [ref=e136]: "#dedup-room-1776636845823"
+            - generic [ref=e137]:
+              - img [ref=e138]
+              - generic [ref=e143]: "1"
+            - button "join" [ref=e145] [cursor=pointer]
+          - generic [ref=e146]:
+            - generic [ref=e149]: "#diag-p3-1776636985"
+            - generic [ref=e150]:
+              - img [ref=e151]
+              - generic [ref=e156]: "1"
+            - button "join" [ref=e158] [cursor=pointer]
+          - generic [ref=e159]:
+            - generic [ref=e160]:
+              - generic [ref=e162]: "#diag-private-room"
+              - paragraph [ref=e163]: slice0 test
+            - generic [ref=e164]:
+              - img [ref=e165]
+              - generic [ref=e170]: "1"
+            - button "join" [ref=e172] [cursor=pointer]
+          - generic [ref=e173]:
+            - generic [ref=e176]: "#files-1776636849648"
+            - generic [ref=e177]:
+              - img [ref=e178]
+              - generic [ref=e183]: "2"
+            - button "join" [ref=e185] [cursor=pointer]
+          - generic [ref=e186]:
+            - generic [ref=e188]:
+              - link "#general" [ref=e189] [cursor=pointer]:
+                - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+              - generic [ref=e190]: member
+            - generic [ref=e191]:
+              - img [ref=e192]
+              - generic [ref=e197]: "4"
+            - generic [ref=e198]:
+              - link "open" [ref=e199] [cursor=pointer]:
+                - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+              - button "leave" [ref=e200] [cursor=pointer]
+          - generic [ref=e201]:
+            - generic [ref=e203]:
+              - link "#perm-1776636855423" [ref=e236] [cursor=pointer]:
+                - /url: /rooms/b2137311-3868-4414-8c14-5cde611ef586
+              - generic [ref=e237]: member
+            - generic [ref=e205]:
+              - img [ref=e206]
+              - generic [ref=e211]: "3"
+            - generic [ref=e212]:
+              - link "open" [ref=e238] [cursor=pointer]:
+                - /url: /rooms/b2137311-3868-4414-8c14-5cde611ef586
+              - button "leave" [ref=e239] [cursor=pointer]
+          - generic [ref=e214]:
+            - generic [ref=e217]: "#pres-1776636859161"
+            - generic [ref=e218]:
+              - img [ref=e219]
+              - generic [ref=e224]: "2"
+            - button "join" [ref=e226] [cursor=pointer]
+      - generic [ref=e227]:
+        - generic [ref=e228]: My Rooms
+        - generic [ref=e229]:
+          - link "# general" [ref=e230] [cursor=pointer]:
+            - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+            - generic [ref=e231]: "#"
+            - generic [ref=e232]: general
+          - link "# perm-1776636855423" [ref=e240] [cursor=pointer]:
+            - /url: /rooms/b2137311-3868-4414-8c14-5cde611ef586
+            - generic [ref=e241]: "#"
+            - generic [ref=e242]: perm-1776636855423
+        - generic [ref=e233]: Direct Messages
+        - link "Manage contacts →" [ref=e235] [cursor=pointer]:
+          - /url: /friends
+  - generic [ref=e4]:
+    - img [ref=e6]
+    - button "Open Tanstack query devtools" [ref=e54] [cursor=pointer]:
+      - img [ref=e55]

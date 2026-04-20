@@ -963,33 +963,38 @@ None. Phase 3 real-time features reuse existing Phase 1 / Phase 2 REST endpoints
 
 ---
 
-## Phase 3 XMPP integration (P2, budget-gated)
+## Phase 3 XMPP integration — shipped (option d, bidirectional + S2S)
 
-XMPP integration in Phase 3 is a **budget-gated P2 stretch** with a pre-committed fallback ladder (see `docs/features/phase-3-spec.md` Slice 7). The contract surface depends on which fallback shipped.
-
-### If fallback (d) or (d-minus) shipped — ejabberd + bridge
+**Landed at fallback (d) bidirectional** plus bonus S2S federation between two ejabberd instances.
 
 **No new public REST endpoints.** The bridge is an internal `BackgroundService` (`api/Features/XmppBridge/XmppBridgeService.cs`) that:
-1. Connects to ejabberd as an XMPP client using configured credentials.
-2. Subscribes to the hardcoded MUC `bridge@conference.chat.local`.
-3. On each received MUC message, writes a row into the `messages` table for the configured bridge room, with `authorUsername` prefixed `xmpp:{nick}` and `authorId = NULL` (or a seeded "XMPP bridge" system user — implementation choice at Slice 7 time).
-4. Invokes `Clients.Group($"room-{bridgeRoomId}").SendAsync("MessageReceived", …)` so connected chat clients see the bridged message live.
+1. Connects to ejabberd as `bridge-bot@chat.local` using configured credentials.
+2. Subscribes to `bridge@conference.chat.local` MUC.
+3. On each received MUC `groupchat` stanza, writes a row into `messages` for the configured bridge room with `authorUsername = "xmpp:{nick}"` and upserts a non-loginable system user for that nick.
+4. Broadcasts `MessageReceived` via `IHubContext<ChatHub>` so connected clients see the bridged message live.
+5. On each app `MessageReceived` in the bridge room, publishes the message to a bounded `Channel<(string,string)>(200, DropOldest)` which a writer task drains to ejabberd, prefixed `[{username}]:`.
 
-**Configuration (docker-compose env vars):**
-- `XMPP__HOST` — ejabberd hostname (container name).
-- `XMPP__USERNAME` / `XMPP__PASSWORD` — bridge client credentials (dedicated ejabberd account).
-- `XMPP__MUC` — full MUC jid.
-- `XMPP__BRIDGE_ROOM_ID` — UUID of the chat room to mirror into.
+**Configuration (docker-compose env vars on the `api` service):**
+- `XMPP__HOST` — ejabberd hostname (`ejabberd`).
+- `XMPP__USERNAME` / `XMPP__PASSWORD` — bridge credentials (`bridge-bot` / `Bridge123!`).
+- `XMPP__MUC` — `bridge@conference.chat.local`.
+- `XMPP__BRIDGE_ROOM_ID` — UUID of the app room to mirror into.
 
-**Reverse direction (our app → XMPP)** is deferred beyond Phase 3 except as a free-time stretch — see Slice 7 scope in the spec.
+**ejabberd services:**
 
-### If fallback (c) shipped — ejabberd standalone
+| Service | Domain | Ports (host) | Container IP |
+|---------|--------|--------------|--------------|
+| `ejabberd` | `chat.local` | 5222, 5269, 5280 | 172.26.0.10 |
+| `ejabberd-fed` | `fed.local` | 5223 (c2s), 5270 (s2s) | 172.26.0.11 |
 
-ejabberd runs in docker-compose. No bridge code. No Phase 3 contract additions. Our app is unchanged.
+Both services share `ejabberd/inetrc` which points Erlang's `inet_res` at Docker's embedded DNS (127.0.0.11). `conference.chat.local` and `conference.fed.local` are Docker network aliases on their respective containers — required for S2S MUC subdomain resolution.
 
-### If fallback (b) or (a) shipped
+**S2S federation:** `ejabberd` and `ejabberd-fed` authenticate via `mod_s2s_dialback` with `s2s_use_starttls: false` (safe inside Docker bridge network). `gajim-user-fed@fed.local` can join `bridge@conference.chat.local` and their messages bridge into the app identically to local accounts.
 
-No contract additions. `docs/xmpp-design.md` (if written) describes the intended architecture; treat as documentation, not contract.
+**Pre-registered accounts (via `ejabberd-setup` / `ejabberd-fed-setup` one-shot containers):**
+- `bridge-bot@chat.local` / `Bridge123!` — the bridge service account
+- `gajim-user-a@chat.local`, `gajim-user-b@chat.local` / `Test123!` — demo Gajim accounts
+- `gajim-user-fed@fed.local` / `Test123!` — federated demo account
 
 ---
 

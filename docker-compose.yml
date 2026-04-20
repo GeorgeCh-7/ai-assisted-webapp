@@ -29,8 +29,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      ejabberd:
-        condition: service_healthy
     volumes:
       - ./api:/src
       - dotnet_nuget:/root/.nuget
@@ -39,14 +37,26 @@ services:
 
   ejabberd:
     image: ghcr.io/processone/ejabberd:latest
+    environment:
+      ERL_INETRC: /opt/ejabberd/conf/inetrc
     ports:
       - "5222:5222"
+      - "5269:5269"
       - "5280:5280"
     volumes:
       - ./ejabberd/ejabberd.yml:/opt/ejabberd/conf/ejabberd.yml:ro
+      - ./ejabberd/inetrc:/opt/ejabberd/conf/inetrc:ro
       - ejabberd_data:/opt/ejabberd/database
+    networks:
+      default:
+        aliases:
+          - chat.local
+          - conference.chat.local
+        ipv4_address: 172.26.0.10
     healthcheck:
-      test: ["CMD", "/opt/ejabberd/bin/ejabberdctl", "status"]
+      # ejabberdctl status uses Erlang distribution (RPC) which fails in Docker
+      # due to hostname mismatch; the HTTP API on :5280 is equivalent and reliable.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:5280/api/status"]
       interval: 10s
       timeout: 5s
       retries: 18
@@ -68,6 +78,47 @@ services:
         curl -sf -X POST http://ejabberd:5280/api/register -H 'Content-Type: application/json' -d '{"user":"gajim-user-b","host":"chat.local","password":"Test123!"}' || true
         echo 'ejabberd accounts ready'
 
+  # Second ejabberd instance for S2S federation testing
+  ejabberd-fed:
+    image: ghcr.io/processone/ejabberd:latest
+    environment:
+      ERL_INETRC: /opt/ejabberd/conf/inetrc
+    ports:
+      - "5223:5222"   # expose on a different host port for Gajim
+      - "5270:5269"
+    volumes:
+      - ./ejabberd/ejabberd-fed.yml:/opt/ejabberd/conf/ejabberd.yml:ro
+      - ./ejabberd/inetrc:/opt/ejabberd/conf/inetrc:ro
+      - ejabberd_fed_data:/opt/ejabberd/database
+    networks:
+      default:
+        aliases:
+          - fed.local
+          - conference.fed.local
+        ipv4_address: 172.26.0.11
+    healthcheck:
+      # ejabberdctl status uses Erlang distribution (RPC) which fails in Docker
+      # due to hostname mismatch; the HTTP API on :5280 is equivalent and reliable.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:5280/api/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+
+  # One-shot container that registers accounts on the federation server
+  ejabberd-fed-setup:
+    image: curlimages/curl:latest
+    depends_on:
+      ejabberd-fed:
+        condition: service_healthy
+    restart: "no"
+    command:
+      - sh
+      - -c
+      - |
+        curl -sf -X POST http://ejabberd-fed:5280/api/register -H 'Content-Type: application/json' -d '{"user":"gajim-user-fed","host":"fed.local","password":"Test123!"}' || true
+        echo 'ejabberd-fed accounts ready'
+
   web:
     build:
       context: ./web
@@ -87,3 +138,10 @@ volumes:
   dotnet_nuget:
   dp_keys:
   ejabberd_data:
+  ejabberd_fed_data:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.26.0.0/24
