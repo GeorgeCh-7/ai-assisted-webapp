@@ -84,13 +84,14 @@
 
 ---
 
-## Act 6 — XMPP bridge (shipped, one-way)
+## Act 6 — XMPP bridge (shipped, bidirectional)
 
 **Gajim setup (before judges join):**
 - Server: `localhost`, port `5222`, no TLS
 - Account A: `gajim-user-a@chat.local` / `Test123!`
 - Account B: `gajim-user-b@chat.local` / `Test123!`
 - Both accounts join MUC: `bridge@conference.chat.local`
+- *Optional S2S bonus:* a third Gajim profile on server `localhost:5223` as `gajim-user-fed@fed.local` / `Test123!` can join the same MUC via S2S federation.
 
 **Demo steps:**
 1. Open Gajim. Show the MUC `bridge@conference.chat.local` — both gajim-user-a and gajim-user-b are members. The `bridge-bot` presence is also visible (that's our .NET bridge).
@@ -102,6 +103,7 @@
 **Narration:**
 - "ejabberd runs as a separate service in the same `docker compose up`. Our .NET `XmppBridgeService` connects as `bridge-bot`, joins the MUC, and mirrors messages in both directions — XMPP → app via SignalR, and app → XMPP via a bounded async channel so back-pressure is handled if the connection drops."
 - "App messages appear in Gajim prefixed with the sender's username: `[alice]: hello`. Jabber messages appear in the app with a 'via Jabber' badge."
+- *If showing S2S:* "There's a second ejabberd instance running as `fed.local` on port 5223. The two servers authenticate each other over XMPP S2S — `gajim-user-fed@fed.local` can join the same MUC and their messages bridge into the app exactly like a local account. That's ejabberd-to-ejabberd federation inside the same `docker compose up`."
 
 **Known flake:** The bridge requires the `#general` room to exist in the app before it can forward. If the room was not pre-seeded, create it during pre-flight (Act 2 step 1 creates `live-demo`; ensure `general` exists separately).
 
@@ -110,7 +112,7 @@
 ## Act 7 — Close (30s)
 
 - "Everything you saw runs in a single `docker compose up`. No external services beyond Postgres."
-- "Phase 3 thesis: real-time UX first, Jabber surface second. The bridge shipped one-way — XMPP → app — which is the demo-visible direction. Reverse direction is a deferred stretch."
+- "Phase 3 thesis: real-time UX first, Jabber surface second. The bridge shipped bidirectional — XMPP ↔ app — plus an optional S2S federation layer between two ejabberd instances."
 - Point judges to `docs/known-bugs.md` for deferred items and `docs/roadmap.md` for what Phase 3 delivered.
 
 ---

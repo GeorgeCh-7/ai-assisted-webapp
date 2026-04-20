@@ -1,0 +1,59 @@
+- generic [ref=e2]:
+  - generic [ref=e118]:
+    - navigation [ref=e119]:
+      - link "◈ Chat" [ref=e120] [cursor=pointer]:
+        - /url: /rooms
+      - generic [ref=e121]:
+        - link "Public Rooms" [ref=e122] [cursor=pointer]:
+          - /url: /rooms
+        - link "Private Rooms" [ref=e123] [cursor=pointer]:
+          - /url: /rooms?private=1
+        - link "Contacts" [ref=e124] [cursor=pointer]:
+          - /url: /friends
+        - link "Sessions" [ref=e125] [cursor=pointer]:
+          - /url: /sessions
+      - button [ref=e126] [cursor=pointer]:
+        - img
+      - button "alice_diag" [ref=e127] [cursor=pointer]:
+        - img
+        - text: alice_diag
+    - generic [ref=e128]:
+      - generic [ref=e130]:
+        - generic [ref=e132]:
+          - generic [ref=e133]:
+            - heading "Public Rooms" [level=1] [ref=e134]
+            - paragraph [ref=e135]: 1 room
+          - button "New room" [ref=e136] [cursor=pointer]:
+            - img
+            - text: New room
+        - generic [ref=e139]:
+          - img
+          - textbox "filter rooms…" [ref=e140]
+        - generic [ref=e142]:
+          - generic [ref=e143]: room
+          - generic [ref=e144]: users
+        - generic [ref=e147]:
+          - generic [ref=e149]:
+            - link "#general" [ref=e167] [cursor=pointer]:
+              - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+            - generic [ref=e168]: member
+          - generic [ref=e151]:
+            - img [ref=e152]
+            - generic [ref=e157]: "3"
+          - generic [ref=e158]:
+            - link "open" [ref=e169] [cursor=pointer]:
+              - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+            - button "leave" [ref=e170] [cursor=pointer]
+      - generic [ref=e160]:
+        - generic [ref=e161]: My Rooms
+        - link "# general" [ref=e171] [cursor=pointer]:
+          - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+          - generic [ref=e172]: "#"
+          - generic [ref=e173]: general
+        - generic [ref=e164]: Direct Messages
+        - link "Manage contacts →" [ref=e166] [cursor=pointer]:
+          - /url: /friends
+  - generic [ref=e19]:
+    - img [ref=e21]
+    - button "Open Tanstack query devtools" [ref=e69] [cursor=pointer]:
+      - img [ref=e70]

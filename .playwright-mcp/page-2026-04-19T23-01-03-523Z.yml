@@ -1,0 +1,152 @@
+- generic:
+  - generic:
+    - generic:
+      - navigation:
+        - link:
+          - /url: /rooms
+          - text: ◈ Chat
+        - generic:
+          - link:
+            - /url: /rooms
+            - text: Public Rooms
+          - link:
+            - /url: /rooms?private=1
+            - text: Private Rooms
+          - link:
+            - /url: /friends
+            - text: Contacts
+          - link:
+            - /url: /sessions
+            - text: Sessions
+        - button:
+          - img
+          - generic: "2"
+        - button:
+          - img
+          - text: alice_diag
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - heading [level=1]: Public Rooms
+                  - paragraph: 5 rooms
+                - button:
+                  - img
+                  - text: New room
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                  - textbox:
+                    - /placeholder: filter rooms…
+            - generic:
+              - generic:
+                - generic: room
+                - generic: users
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic: "#dedup-room-1776636845823"
+                  - generic:
+                    - img
+                    - generic: "1"
+                  - generic:
+                    - button: join
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic: "#files-1776636849648"
+                  - generic:
+                    - img
+                    - generic: "2"
+                  - generic:
+                    - button: join
+                - generic:
+                  - generic:
+                    - generic:
+                      - link:
+                        - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+                        - text: "#general"
+                      - generic: member
+                  - generic:
+                    - img
+                    - generic: "4"
+                  - generic:
+                    - link:
+                      - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+                      - text: open
+                    - button: leave
+                - generic:
+                  - generic:
+                    - generic:
+                      - link:
+                        - /url: /rooms/b2137311-3868-4414-8c14-5cde611ef586
+                        - text: "#perm-1776636855423"
+                      - generic: member
+                  - generic:
+                    - img
+                    - generic: "3"
+                  - generic:
+                    - link:
+                      - /url: /rooms/b2137311-3868-4414-8c14-5cde611ef586
+                      - text: open
+                    - button: leave
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic: "#pres-1776636859161"
+                  - generic:
+                    - img
+                    - generic: "2"
+                  - generic:
+                    - button: join
+        - generic:
+          - generic: My Rooms
+          - generic:
+            - link:
+              - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+              - generic: "#"
+              - generic: general
+            - link:
+              - /url: /rooms/b2137311-3868-4414-8c14-5cde611ef586
+              - generic: "#"
+              - generic: perm-1776636855423
+          - generic: Direct Messages
+          - generic:
+            - link:
+              - /url: /dms/6aeb6f77-87cb-4586-ba75-c8b9be9326bd
+              - generic: bob_diag
+          - generic:
+            - link:
+              - /url: /friends
+              - text: Manage contacts →
+    - generic:
+      - generic:
+        - img
+      - button:
+        - img
+  - dialog "Create room" [ref=e404]:
+    - heading "Create room" [level=2] [ref=e406]
+    - generic [ref=e407]:
+      - generic [ref=e408]:
+        - generic [ref=e409]: "# name"
+        - textbox "# name" [active] [ref=e410]:
+          - /placeholder: e.g. general
+      - generic [ref=e411]:
+        - generic [ref=e412]: Description (optional)
+        - textbox "Description (optional)" [ref=e413]:
+          - /placeholder: What's this room about?
+      - generic [ref=e414]:
+        - checkbox "Private roominvite-only, not listed in catalog" [ref=e415] [cursor=pointer]
+        - checkbox
+        - generic [ref=e416] [cursor=pointer]: Private roominvite-only, not listed in catalog
+      - generic [ref=e417]:
+        - button "Cancel" [ref=e418] [cursor=pointer]
+        - button "Create room" [ref=e419] [cursor=pointer]
+    - button "Close" [ref=e420] [cursor=pointer]:
+      - img [ref=e421]
+      - generic [ref=e424]: Close

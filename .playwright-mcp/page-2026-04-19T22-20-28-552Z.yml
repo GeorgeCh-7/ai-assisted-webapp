@@ -1,0 +1,113 @@
+- generic [ref=e2]:
+  - generic [ref=e103]:
+    - navigation [ref=e104]:
+      - link "◈ Chat" [ref=e105] [cursor=pointer]:
+        - /url: /rooms
+      - generic [ref=e106]:
+        - link "Public Rooms" [ref=e107] [cursor=pointer]:
+          - /url: /rooms
+        - link "Private Rooms" [ref=e108] [cursor=pointer]:
+          - /url: /rooms?private=1
+        - link "Contacts" [ref=e109] [cursor=pointer]:
+          - /url: /friends
+        - link "Sessions" [ref=e110] [cursor=pointer]:
+          - /url: /sessions
+      - button "2" [ref=e111] [cursor=pointer]:
+        - img
+        - generic [ref=e112]: "2"
+      - button "alice_diag" [ref=e113] [cursor=pointer]:
+        - img
+        - text: alice_diag
+    - generic [ref=e114]:
+      - generic [ref=e243]:
+        - generic [ref=e244]:
+          - link "Back to rooms" [ref=e245] [cursor=pointer]:
+            - /url: /rooms
+            - img [ref=e246]
+          - generic [ref=e249]:
+            - generic [ref=e250]: "#"
+            - heading "perm-1776636855423" [level=1] [ref=e251]
+            - generic "Connected" [ref=e252]
+          - generic [ref=e253]:
+            - generic [ref=e254]:
+              - img [ref=e255]
+              - text: "3"
+            - img [ref=e260]
+            - button "Room settings" [ref=e264] [cursor=pointer]:
+              - img
+            - button "leave" [ref=e265] [cursor=pointer]
+        - generic [ref=e268]:
+          - generic [ref=e269]:
+            - generic [ref=e270]: A
+            - generic [ref=e271]:
+              - generic [ref=e272]:
+                - generic [ref=e273]: a1776636853891005
+                - generic "offline" [ref=e274]
+                - generic [ref=e275]: 02:14
+              - paragraph [ref=e276]: Author only edit me
+            - button "Message actions" [ref=e278] [cursor=pointer]:
+              - img
+          - generic [ref=e285]:
+            - generic [ref=e286]: A
+            - generic [ref=e287]:
+              - generic [ref=e288]:
+                - generic [ref=e289]: alice_diag
+                - generic "online" [ref=e290]
+                - generic [ref=e291]: 02:20
+              - paragraph [ref=e292]: nav-test-Y-1
+            - button "Message actions" [ref=e294] [cursor=pointer]:
+              - img
+          - generic [ref=e295]:
+            - generic [ref=e296]: A
+            - generic [ref=e297]:
+              - generic [ref=e298]:
+                - generic [ref=e299]: alice_diag
+                - generic "online" [ref=e300]
+                - generic [ref=e301]: 02:20
+              - paragraph [ref=e302]: nav-test-Y-2
+            - button "Message actions" [ref=e304] [cursor=pointer]:
+              - img
+          - generic [ref=e305]:
+            - generic [ref=e306]: A
+            - generic [ref=e307]:
+              - generic [ref=e308]:
+                - generic [ref=e309]: alice_diag
+                - generic "online" [ref=e310]
+                - generic [ref=e311]: 02:20
+              - paragraph [ref=e312]: nav-test-Y-3
+            - button "Message actions" [ref=e314] [cursor=pointer]:
+              - img
+          - generic [ref=e315]:
+            - generic [ref=e316]: A
+            - generic [ref=e317]:
+              - generic [ref=e318]:
+                - generic [ref=e319]: alice_diag
+                - generic "online" [ref=e320]
+                - generic [ref=e321]: 02:20
+              - paragraph [ref=e322]: nav-test-Y-4
+            - button "Message actions" [ref=e324] [cursor=pointer]:
+              - img
+        - generic [ref=e281]:
+          - textbox "Type a message… (Enter to send, Shift+Enter for newline)" [active] [ref=e283]
+          - button "Attach file" [ref=e284] [cursor=pointer]:
+            - img
+          - button "Send message" [disabled]:
+            - img
+      - generic [ref=e227]:
+        - generic [ref=e228]: My Rooms
+        - generic [ref=e229]:
+          - link "# general" [ref=e230] [cursor=pointer]:
+            - /url: /rooms/f678e2de-406d-4db1-bb08-6244ee2cd766
+            - generic [ref=e231]: "#"
+            - generic [ref=e232]: general
+          - link "# perm-1776636855423" [ref=e240] [cursor=pointer]:
+            - /url: /rooms/b2137311-3868-4414-8c14-5cde611ef586
+            - generic [ref=e241]: "#"
+            - generic [ref=e242]: perm-1776636855423
+        - generic [ref=e233]: Direct Messages
+        - link "Manage contacts →" [ref=e235] [cursor=pointer]:
+          - /url: /friends
+  - generic [ref=e4]:
+    - img [ref=e6]
+    - button "Open Tanstack query devtools" [ref=e54] [cursor=pointer]:
+      - img [ref=e55]
