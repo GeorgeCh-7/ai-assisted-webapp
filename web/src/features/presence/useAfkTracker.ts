@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react'
 import { useHubContext } from '@/features/chat/HubProvider'
 
 const HEARTBEAT_MS = 15_000
-const IDLE_THRESHOLD_MS = HEARTBEAT_MS * 2
+// Stop heartbeats only after 5 min of zero interaction (server AFK threshold is 60 s of missed heartbeats)
+const IDLE_THRESHOLD_MS = 5 * 60 * 1000
 const CHANNEL_NAME = 'chat:activity'
 
 export function useAfkTracker() {
@@ -23,7 +24,8 @@ export function useAfkTracker() {
       try { channel?.postMessage(null) } catch {}
     }
 
-    const EVENTS = ['mousemove', 'keydown', 'pointerdown', 'focus'] as const
+    // Covers typing, clicking, scrolling (reading), touch, tab focus, and navigation
+    const EVENTS = ['mousemove', 'keydown', 'pointerdown', 'scroll', 'input', 'focus', 'touchstart', 'popstate'] as const
     EVENTS.forEach(ev => window.addEventListener(ev, markActive, { passive: true }))
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') markActive()
