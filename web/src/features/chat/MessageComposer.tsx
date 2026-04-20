@@ -168,30 +168,6 @@ export default function MessageComposer({
         <div className={`flex items-end rounded-md border bg-muted/30 focus-within:ring-1 focus-within:ring-ring ${
           overLimit ? 'border-destructive focus-within:ring-destructive' : isEditing ? 'border-amber-400/60' : 'border-input'
         }`}>
-          {uploadContext && !isEditing && (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={e => {
-                  const file = e.target.files?.[0]
-                  if (file) handleFileSelected(file)
-                  e.target.value = ''
-                }}
-              />
-              <button
-                type="button"
-                className="h-9 w-9 shrink-0 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={disabled || uploading}
-                aria-label="Attach file"
-              >
-                <Paperclip className="h-4 w-4" />
-              </button>
-            </>
-          )}
-
           <div className="relative flex-1">
             <textarea
               ref={textareaRef}
@@ -227,6 +203,30 @@ export default function MessageComposer({
               </span>
             )}
           </div>
+
+          {uploadContext && !isEditing && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (file) handleFileSelected(file)
+                  e.target.value = ''
+                }}
+              />
+              <button
+                type="button"
+                className="h-9 w-9 shrink-0 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={disabled || uploading}
+                aria-label="Attach file"
+              >
+                <Paperclip className="h-4 w-4" />
+              </button>
+            </>
+          )}
 
           <button
             type="button"
