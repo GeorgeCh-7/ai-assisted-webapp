@@ -232,14 +232,25 @@ public class ChatHub : Hub
 
     private async Task BroadcastPresenceToRoomsAsync(Guid userId, string status)
     {
+        var payload = new { userId = userId.ToString(), status };
+
         var roomIds = await _db.RoomMemberships
             .Where(m => m.UserId == userId)
             .Select(m => m.RoomId)
             .ToListAsync();
 
-        var payload = new { userId = userId.ToString(), status };
         foreach (var roomId in roomIds)
             await Clients.Group(GroupName(roomId)).SendAsync("PresenceChanged", payload);
+
+        // Also notify friends directly via their personal group so presence updates
+        // arrive regardless of which page the friend is currently viewing.
+        var friendIds = await _db.Friendships
+            .Where(f => (f.UserAId == userId || f.UserBId == userId) && f.Status == "accepted")
+            .Select(f => f.UserAId == userId ? f.UserBId : f.UserAId)
+            .ToListAsync();
+
+        foreach (var friendId in friendIds)
+            await Clients.Group($"user-{friendId}").SendAsync("PresenceChanged", payload);
     }
 
     private async Task<long> NextWatermarkAsync(Guid roomId)
@@ -293,6 +304,11 @@ public class ChatHub : Hub
 
         try { await _db.SaveChangesAsync(); }
         catch { /* unread increment is best-effort */ }
+
+        // Notify each non-sender member so their catalog badge updates in real-time
+        var roomIdStr = roomId.ToString();
+        foreach (var memberId in memberIds)
+            await Clients.Group($"user-{memberId}").SendAsync("RoomUnreadUpdated", new { roomId = roomIdStr });
     }
 
     // --- Phase 2 hub stubs ---
@@ -696,6 +712,9 @@ public class ChatHub : Hub
 
         try { await _db.SaveChangesAsync(); }
         catch { /* best-effort */ }
+
+        // Notify recipient so their DM sidebar badge updates in real-time
+        await Clients.Group($"user-{recipientId}").SendAsync("DmUnreadUpdated", new { threadId = threadId.ToString() });
     }
 }
 
