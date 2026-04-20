@@ -24,6 +24,12 @@ export function useAfkTracker() {
       try { channel?.postMessage(null) } catch {}
     }
 
+    // Test hook: window.__freezeIdle() → stops heartbeats immediately (simulates AFK idle)
+    if (import.meta.env.DEV) {
+      ;(window as Record<string, unknown>)['__freezeIdle'] = () => { lastInteractionRef.current = 0 }
+      ;(window as Record<string, unknown>)['__markActive'] = markActive
+    }
+
     // Covers typing, clicking, scrolling (reading), touch, tab focus, and navigation
     const EVENTS = ['mousemove', 'keydown', 'pointerdown', 'scroll', 'input', 'focus', 'touchstart', 'popstate'] as const
     EVENTS.forEach(ev => window.addEventListener(ev, markActive, { passive: true }))
