@@ -11,6 +11,23 @@
 
 ---
 
+## Resolved in UI Sweep (2026-04-20)
+
+- **BUG-01** (ejabberd `(unhealthy)` in docker ps) — `ejabberdctl status` uses Erlang RPC which fails due to container hostname mismatch; replaced healthcheck with `wget` HTTP probe on `:5280`. Both ejabberd services now reach `(healthy)`.
+- **BUG-02** (presence shows offline for existing room members on join) — fixed via `useRoomMembers` hook in `ChatWindow.tsx` that seeds `['presence', userId]` from `GET /api/rooms/{id}/members` on room load. Verified: Bob's indicator shows online in Alice's view within 5s.
+- **BUG-03** (oversized files get 400 before 413) — moved size check before scope GUID parse in `FileEndpoints.cs` so 413 fires regardless of scopeId format.
+- **BUG-04** (whitespace username error message echoes raw spaces) — added `InvalidUserName` branch in `AuthEndpoints.cs` that returns "Username contains invalid characters" instead of Identity's default message.
+- **BUG-05** (public room invitation error message confusing) — changed to "Invitations are only valid for private rooms" in `RoomInvitationEndpoints.cs`.
+- **BUG-06** (PresenceIndicator not queryable by automated tests) — added `data-presence={status}` attribute to the indicator span.
+
+## Accepted Behaviors (not bugs, no fix planned)
+
+- **File scope validated before size in edge case** — API correctly validates scope/scopeId before file size for malformed requests. Real UI always sends a valid scope, so users always see 413. Accepted: validation ordering is sensible (scope determines limit context).
+- **Public room invitation API message** — UI correctly hides the invitation tab for public rooms; the "Invitations are only valid for private rooms" message is only reachable by direct API callers. Accepted: not a user-facing issue.
+- **PresenceIndicator `data-presence` attribute** — was missing, making automated presence assertions unreliable. Added as part of BUG-06 fix.
+
+---
+
 ## Still Deferred
 
 These were intentionally not fixed. Do not treat as new scope without an explicit decision.

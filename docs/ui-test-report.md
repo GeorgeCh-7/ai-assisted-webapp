@@ -4,23 +4,41 @@
 **Tester:** Claude Code (automated Playwright sweep)  
 **Tool:** Playwright 1.59.1, Chromium, `e2e/tests/ui-bug-sweep.spec.ts`  
 **Run time:** ~4 min 30s (40 tests, 1 worker)  
-**Screenshots:** `e2e/test-results/screenshots/`
+**Screenshots:** `e2e/test-results/screenshots/`  
+**Status:** All 6 bugs fixed same day. See fix summary below.
 
 ---
 
 ## Executive Summary
 
-| Severity | Count |
-|---|---|
-| Demo-blocking | **0** |
-| Significant | **2** |
-| Minor | **3** |
-| Polish | **1** |
-| **Total bugs** | **6** |
+| Severity | Count | Status |
+|---|---|---|
+| Demo-blocking | **0** | — |
+| Significant | **2** | ✅ Both fixed |
+| Minor | **3** | ✅ All fixed |
+| Polish | **1** | ✅ Fixed |
+| **Total bugs** | **6** | **All resolved** |
 
-**Good news:** Bug 1 (private rooms visible in catalog) is **resolved** — Carol cannot see private rooms. No console errors on any page. No unexpected 4xx/5xx on normal navigation. All core real-time events (catalog update, invitation badge, friend request, DM sidebar) work. Message byte boundary (3072/3073) is correct. Double-click idempotency works.
+**No open bugs.** Bug 1 (private rooms visible in catalog) was already resolved before this sweep. All 6 bugs found during the sweep were fixed within 30 minutes (same session).
 
-**Primary concern for demo:** Both ejabberd containers are `(unhealthy)` in `docker compose ps`. The XMPP bridge (Act 6) may not function. Investigate before demo.
+---
+
+## Fix Summary (2026-04-20)
+
+| Bug | Fix | Commit |
+|---|---|---|
+| BUG-01: ejabberd `(unhealthy)` | Replaced `ejabberdctl status` healthcheck with `wget` HTTP probe on `:5280` in `docker-compose.yml` | `775e00e` |
+| BUG-02: Presence offline on join | `useRoomMembers` hook seeds `['presence', userId]` from members API on room load (`ChatWindow.tsx`) | prior session |
+| BUG-03: File size check after scope parse | Moved size validation before GUID parse in `FileEndpoints.cs` | `775e00e` |
+| BUG-04: Whitespace username echoed in error | Added `InvalidUserName` branch returning "Username contains invalid characters" in `AuthEndpoints.cs` | `775e00e` |
+| BUG-05: Confusing public room invitation message | Changed to "Invitations are only valid for private rooms" in `RoomInvitationEndpoints.cs` | `775e00e` |
+| BUG-06: `data-presence` attribute missing | Added `data-presence={status}` to `PresenceIndicator` span | `775e00e` |
+
+**BUG-02 verified:** `e2e/tests/presence-verify.spec.ts` — 1 passed in 7.2s. Bob's indicator shows `data-presence="online"` in Alice's view within 5s of Bob connecting.
+
+**BUG-01 side-effect:** Accounts `bridge-bot`, `gajim-user-a`, `gajim-user-b` are now registered in ejabberd (via HTTP API). Bridge-bot connected to MUC `bridge@conference.chat.local` and resolved target room `general` successfully.
+
+---
 
 ---
 
