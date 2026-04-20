@@ -218,7 +218,7 @@ export default function MessageComposer({
               />
               <button
                 type="button"
-                className="h-9 w-9 shrink-0 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors"
+                className="h-8 w-8 shrink-0 flex items-center justify-center rounded-sm m-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={disabled || uploading}
                 aria-label="Attach file"
@@ -230,7 +230,7 @@ export default function MessageComposer({
 
           <button
             type="button"
-            className={`h-9 w-9 shrink-0 flex items-center justify-center rounded-sm m-0.5 transition-colors disabled:opacity-40 ${
+            className={`h-8 w-8 shrink-0 flex items-center justify-center rounded-sm m-0.5 transition-colors disabled:opacity-40 ${
               isEditing
                 ? 'bg-amber-500 hover:bg-amber-600 text-white'
                 : canSend
