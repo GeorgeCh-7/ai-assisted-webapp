@@ -1,0 +1,6 @@
+% Use Erlang's own DNS resolver (inet_res) pointed at Docker's embedded DNS.
+% Alpine musl's native resolver fails on .local Docker aliases; inet_res works fine.
+% Docker DNS (127.0.0.11) resolves network aliases and returns NOERROR for SRV
+% queries so ejabberd S2S falls back to A-record lookup correctly.
+{nameserver, {127,0,0,11}}.
+{lookup, [dns]}.

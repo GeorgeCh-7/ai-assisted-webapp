@@ -186,8 +186,20 @@ public class ChatHub : Hub
                     .FirstAsync(m => m.Id == args.IdempotencyKey);
             }
 
+            var attachedFiles = new List<FileAttachment>();
+            if (args.AttachmentFileIds is { Length: > 0 })
+            {
+                attachedFiles = await _db.FileAttachments
+                    .Where(f => args.AttachmentFileIds.Contains(f.Id) && f.UploaderId == userId)
+                    .ToListAsync();
+                foreach (var f in attachedFiles)
+                    f.MessageId = msg.Id;
+                if (attachedFiles.Count > 0)
+                    await _db.SaveChangesAsync();
+            }
+
             var author = await _db.Users.FindAsync(userId);
-            var payload = MessagePayload(msg, author?.UserName ?? "[deleted user]");
+            var payload = MessagePayload(msg, author?.UserName ?? "[deleted user]", attachedFiles);
 
             await Clients.Group(GroupName(args.RoomId)).SendAsync("MessageReceived", payload);
             await IncrementUnreadsAsync(args.RoomId, userId, msg.Id);
@@ -499,8 +511,20 @@ public class ChatHub : Hub
                     .FirstAsync(m => m.Id == args.IdempotencyKey);
             }
 
+            var attachedFiles = new List<FileAttachment>();
+            if (args.AttachmentFileIds is { Length: > 0 })
+            {
+                attachedFiles = await _db.FileAttachments
+                    .Where(f => args.AttachmentFileIds.Contains(f.Id) && f.UploaderId == userId)
+                    .ToListAsync();
+                foreach (var f in attachedFiles)
+                    f.DmMessageId = msg.Id;
+                if (attachedFiles.Count > 0)
+                    await _db.SaveChangesAsync();
+            }
+
             var author = await _db.Users.FindAsync(userId);
-            var payload = DmMessagePayload(msg, author?.UserName ?? "[deleted user]");
+            var payload = DmMessagePayload(msg, author?.UserName ?? "[deleted user]", attachedFiles);
 
             await Clients.Group(DmGroupName(args.ThreadId)).SendAsync("DirectMessageReceived", payload);
             await IncrementDmUnreadsAsync(args.ThreadId, userId, msg.Id);
@@ -584,7 +608,7 @@ public class ChatHub : Hub
         }
     }
 
-    private static object MessagePayload(Message msg, string authorUsername) => new
+    private static object MessagePayload(Message msg, string authorUsername, IEnumerable<FileAttachment>? attachments = null) => new
     {
         id = msg.Id.ToString(),
         roomId = msg.RoomId.ToString(),
@@ -597,10 +621,16 @@ public class ChatHub : Hub
         editedAt = msg.EditedAt,
         deletedAt = msg.DeletedAt,
         replyToMessageId = msg.ReplyToMessageId?.ToString(),
-        attachments = Array.Empty<object>(),
+        attachments = (attachments ?? []).Select(a => new
+        {
+            id = a.Id.ToString(),
+            originalFilename = a.OriginalFilename,
+            contentType = a.ContentType,
+            sizeBytes = a.SizeBytes,
+        }).ToArray(),
     };
 
-    private static object DmMessagePayload(DmMessage msg, string authorUsername) => new
+    private static object DmMessagePayload(DmMessage msg, string authorUsername, IEnumerable<FileAttachment>? attachments = null) => new
     {
         id = msg.Id.ToString(),
         dmThreadId = msg.DmThreadId.ToString(),
@@ -613,7 +643,13 @@ public class ChatHub : Hub
         editedAt = msg.EditedAt,
         deletedAt = msg.DeletedAt,
         replyToMessageId = msg.ReplyToMessageId?.ToString(),
-        attachments = Array.Empty<object>(),
+        attachments = (attachments ?? []).Select(a => new
+        {
+            id = a.Id.ToString(),
+            originalFilename = a.OriginalFilename,
+            contentType = a.ContentType,
+            sizeBytes = a.SizeBytes,
+        }).ToArray(),
     };
 
     private async Task<long> NextDmWatermarkAsync(Guid threadId)

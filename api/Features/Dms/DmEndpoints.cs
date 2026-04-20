@@ -195,6 +195,14 @@ public static class DmEndpoints
 
         string? nextCursor = hasMore ? page.Last().Watermark.ToString() : null;
 
+        var dmMessageIds = page.Select(m => m.Id).ToList();
+        var dmAttachments = await db.FileAttachments
+            .Where(a => a.DmMessageId != null && dmMessageIds.Contains(a.DmMessageId.Value))
+            .ToListAsync();
+        var dmAttachmentLookup = dmAttachments
+            .GroupBy(a => a.DmMessageId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var items = page.Select(m => new DmMessageResponse(
             m.Id,
             threadId,
@@ -207,7 +215,9 @@ public static class DmEndpoints
             m.EditedAt,
             m.DeletedAt,
             m.ReplyToMessageId,
-            Array.Empty<Api.Features.Messages.FileAttachmentResponse>()));
+            dmAttachmentLookup.TryGetValue(m.Id, out var atts)
+                ? atts.Select(a => new Api.Features.Messages.FileAttachmentResponse(a.Id, a.OriginalFilename, a.ContentType, a.SizeBytes)).ToList()
+                : []));
 
         return Results.Ok(new PagedResponse<DmMessageResponse>(items, nextCursor));
     }

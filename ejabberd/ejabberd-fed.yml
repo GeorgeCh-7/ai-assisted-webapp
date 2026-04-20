@@ -1,5 +1,5 @@
 hosts:
-  - "chat.local"
+  - "fed.local"
 
 loglevel: warning
 
@@ -11,7 +11,6 @@ listen:
     max_stanza_size: 262144
     shaper: c2s_shaper
     access: c2s
-    # TLS offered but not required; bridge connects over plain TCP inside docker
     starttls_required: false
 
   -
@@ -31,13 +30,12 @@ listen:
 s2s_use_starttls: false
 s2s_access: s2s
 
-# Allow PLAIN SASL on unencrypted connections (safe inside docker network)
 disable_sasl_mechanisms: []
 
 acl:
   admin:
     user:
-      - "admin": "chat.local"
+      - "admin": "fed.local"
   local:
     user_regexp: ""
   loopback:
@@ -88,7 +86,7 @@ modules:
   mod_last: {}
   mod_muc:
     access:
-      - allow: all   # allow federated users to join rooms
+      - allow: all
     access_create: local
     access_persistent: local
     default_room_options:
